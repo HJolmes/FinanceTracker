@@ -48,43 +48,79 @@ async function callClaude(content) {
 }
 
 function getCategoryName(cat) {
-  return { versicherungen: "Versicherungsvertrag", sparplaene: "Sparplan/ETF", leasing: "Leasing/Kredit", bankkonten: "Bankdokument" }[cat] || "Finanzdokument";
+  return {
+    versicherungen: "Versicherungsvertrag",
+    sparplaene: "Sparplan / ETF",
+    leasing: "Leasing- oder Kreditvertrag",
+    bankkonten: "Bankdokument",
+  }[cat] || "Finanzdokument";
 }
 
-const DETECT_FIELDS = `Felder je Kategorie:
-- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer
-- sparplaene: name,anbieter,typ,beitrag,intervall,depot,isin,startdatum
-- leasing: name,anbieter,typ,rate,intervall,laufzeit,restwert,faelligkeit
-- bankkonten: name,bank,typ,iban,kontonummer
-Nur JSON, keine Erklärung. Zahlen ohne €, Punkt als Dezimaltrennzeichen, Daten als YYYY-MM-DD.`;
+const DETECT_PROMPT = `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente.
+
+AUFGABE: Bestimme die Kategorie und extrahiere alle erkennbaren Felder.
+
+Kategorien:
+- versicherungen: Versicherungspolice, Beitragsrechnung einer Versicherung
+- sparplaene: ETF-Sparplan, Fonds, Bausparvertrag, Tagesgeld, Festgeld
+- leasing: Fahrzeugleasing, Ratenkredit, Darlehensvertrag
+- bankkonten: Girokonto, Kontoauszug, IBAN-Dokument
+
+Felder pro Kategorie (verwende GENAU diese Schluessel):
+- versicherungen: name, anbieter, typ, beitrag, intervall, faelligkeit, polizzennummer
+- sparplaene: name, anbieter, typ, beitrag, intervall, depot, isin, startdatum
+- leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
+- bankkonten: name, bank, typ, iban, kontonummer
+
+Regeln:
+- Antworte NUR mit JSON, keine Erklaerung
+- Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
+- Daten: YYYY-MM-DD
+- Nur Felder die eindeutig erkennbar sind
+- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
+
+Beispiel Ausgabe:
+{"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","beitrag":"8.90","intervall":"monatlich","polizzennummer":"HV-123456"}`;
+
+const FIELDS_PROMPT = (category, fieldList) =>
+  `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente (${getCategoryName(category)}).
+
+Extrahiere diese Felder: ${fieldList}
+
+Regeln:
+- Antworte NUR mit JSON, keine Erklaerung
+- Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
+- Daten: YYYY-MM-DD
+- Nur Felder die eindeutig erkennbar sind
+- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig`;
 
 export async function mapTextToFields(text, category, fields) {
   const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
-  return callClaude(`Finanzdokument (${getCategoryName(category)}). Extrahiere: ${fieldList}\n\nText:\n${text.slice(0, 3000)}\n\nNur JSON.`);
+  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 3500)}`);
 }
 
 export async function mapPDFToFields(file, category, fields) {
-  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu groß (max ${MAX_PDF_MB} MB)`);
+  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu gross (max ${MAX_PDF_MB} MB)`);
   const base64 = await toBase64(file);
   const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
   return callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-    { type: "text", text: `Finanzdokument (${getCategoryName(category)}). Extrahiere: ${fieldList}. Nur JSON.` },
+    { type: "text", text: FIELDS_PROMPT(category, fieldList) },
   ]);
 }
 
 export async function detectAndExtractFromText(text) {
-  const result = await callClaude(`Analysiere deutschen Finanzdokument-Text. Bestimme category (versicherungen|sparplaene|leasing|bankkonten) und extrahiere Felder.\n\nText:\n${text.slice(0, 3000)}\n\n${DETECT_FIELDS}`);
+  const result = await callClaude(`${DETECT_PROMPT}\n\nText:\n${text.slice(0, 3500)}`);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
 }
 
 export async function detectAndExtractFromPDF(file) {
-  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu groß (max ${MAX_PDF_MB} MB)`);
+  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu gross (max ${MAX_PDF_MB} MB)`);
   const base64 = await toBase64(file);
   const result = await callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-    { type: "text", text: `Analysiere dieses Finanzdokument. Bestimme category (versicherungen|sparplaene|leasing|bankkonten) und extrahiere Felder.\n\n${DETECT_FIELDS}` },
+    { type: "text", text: DETECT_PROMPT },
   ]);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
