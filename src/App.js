@@ -9,6 +9,7 @@ import EntryList from "./components/EntryList";
 import AddEntry from "./components/AddEntry";
 import LoginScreen from "./components/LoginScreen";
 import NavBar from "./components/NavBar";
+import Settings from "./components/Settings";
 import "./index.css";
 
 const msalInstance = new PublicClientApplication(msalConfig);
@@ -72,6 +73,12 @@ function AppInner() {
 
   const handleLogin = () => instance.loginPopup(loginRequest);
 
+  const handleNavChange = (tab) => {
+    setActiveTab(tab);
+    setShowAdd(false);
+    setEditEntry(null);
+  };
+
   if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} />;
   if (loading || !data) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text2)" }}>
@@ -81,6 +88,8 @@ function AppInner() {
       </div>
     </div>
   );
+
+  const isSettings = activeTab === "settings";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 480, margin: "0 auto" }}>
@@ -95,14 +104,23 @@ function AppInner() {
               {syncing ? "⟳ Synchronisiert…" : "✓ OneDrive sync"}
             </div>
           </div>
-          <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => instance.logout()}>Abmelden</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 18, padding: "8px 10px", color: isSettings ? "var(--accent)" : undefined }}
+              onClick={() => handleNavChange(isSettings ? "dashboard" : "settings")}
+              title="Einstellungen"
+            >⚙️</button>
+            <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => instance.logout()}>Abmelden</button>
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>
-        {activeTab === "dashboard" && <Dashboard data={data} />}
-        {activeTab !== "dashboard" && (
+        {isSettings && <Settings />}
+        {!isSettings && activeTab === "dashboard" && <Dashboard data={data} />}
+        {!isSettings && activeTab !== "dashboard" && (
           <EntryList
             category={activeTab}
             entries={data[activeTab] || []}
@@ -115,7 +133,7 @@ function AppInner() {
       </div>
 
       {/* FAB Add Button */}
-      {activeTab !== "dashboard" && (
+      {!isSettings && activeTab !== "dashboard" && (
         <button
           className="btn-primary"
           onClick={() => setShowAdd(true)}
@@ -129,7 +147,7 @@ function AppInner() {
       )}
 
       {/* NavBar */}
-      <NavBar active={activeTab} onChange={setActiveTab} />
+      <NavBar active={isSettings ? null : activeTab} onChange={handleNavChange} />
 
       {/* Add / Edit Modal */}
       {(showAdd || editEntry) && (

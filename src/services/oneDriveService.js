@@ -1,7 +1,7 @@
 // src/services/oneDriveService.js
 import { loginRequest, graphConfig } from "./authConfig";
+import { getFolderPath } from "./settingsService";
 
-const FOLDER_PATH = "FinanceTracker";
 const DATA_FILE = "data.json";
 
 async function getAccessToken(instance, accounts) {
@@ -29,7 +29,8 @@ async function callGraph(token, url, method = "GET", body = null) {
 export async function loadData(instance, accounts) {
   try {
     const token = await getAccessToken(instance, accounts);
-    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${FOLDER_PATH}/${DATA_FILE}:/content`;
+    const folderPath = getFolderPath();
+    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${DATA_FILE}:/content`;
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -48,7 +49,8 @@ export async function saveData(instance, accounts, data) {
   localStorage.setItem("financetracker_data", JSON.stringify(data));
   try {
     const token = await getAccessToken(instance, accounts);
-    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${FOLDER_PATH}/${DATA_FILE}:/content`;
+    const folderPath = getFolderPath();
+    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${DATA_FILE}:/content`;
     await fetch(url, {
       method: "PUT",
       headers: {
@@ -64,8 +66,9 @@ export async function saveData(instance, accounts, data) {
 
 export async function uploadDocument(instance, accounts, file, category, entryId) {
   const token = await getAccessToken(instance, accounts);
+  const folderPath = getFolderPath();
   const fileName = `${entryId}_${file.name}`;
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${FOLDER_PATH}/Dokumente/${category}/${fileName}:/content`;
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/Dokumente/${category}/${fileName}:/content`;
   const response = await fetch(url, {
     method: "PUT",
     headers: {
