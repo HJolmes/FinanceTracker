@@ -1,0 +1,11 @@
+{
+  "name": "financetracker-functions",
+  "version": "1.0.0",
+  "description": "Azure Functions Backend – Nordigen/GoCardless Proxy",
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
