@@ -26,6 +26,9 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
   const hasApiKey = !!getClaudeApiKey();
   const isFromSmartUpload = !!pendingFile;
 
+  const filledFieldCount = Object.entries(form)
+    .filter(([k, v]) => k !== "dokument" && v && String(v).trim() !== "").length;
+
   useEffect(() => {
     if (!pendingFile) return;
     setSelectedFile(pendingFile);
@@ -88,7 +91,7 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
       <div style={{ background: "var(--bg2)", borderRadius: "20px 20px 0 0", padding: "24px 20px", maxHeight: "88vh", display: "flex", flexDirection: "column", animation: "slideUp 0.3s ease" }}>
         <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--border)", margin: "0 auto 20px" }} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexShrink: 0 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 20 }}>{entry ? "Eintrag bearbeiten" : "Neuer Eintrag"}</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20 }}>{entry && Object.keys(entry).length > 0 ? "Eintrag prüfen" : "Neuer Eintrag"}</div>
           <button className="btn-ghost" onClick={onClose}>✕</button>
         </div>
 
@@ -106,7 +109,18 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                     <a href={form.dokument} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", fontSize: 12 }}>Öffnen</a>
                     <button className="btn-ghost" style={{ display: "block", margin: "8px auto 0", fontSize: 12 }}
                       onClick={() => { setSelectedFile(null); setOcrState(null); handleChange("dokument", ""); }}>Entfernen</button>
-                    {isFromSmartUpload && <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>✓ Felder von KI erkannt — bitte prüfen!</div>}
+
+                    {isFromSmartUpload && filledFieldCount > 0 && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>
+                        ✓ {filledFieldCount} Felder von KI erkannt — bitte prüfen!
+                      </div>
+                    )}
+                    {isFromSmartUpload && filledFieldCount === 0 && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>
+                        KI konnte keine Felder erkennen — bitte manuell ausfüllen.
+                      </div>
+                    )}
+
                     {!isFromSmartUpload && hasApiKey && selectedFile && ocrState !== "done" && (
                       <button className="btn-secondary" onClick={handleExtract}
                         disabled={ocrState === "ocr" || ocrState === "ai"}
@@ -116,7 +130,11 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                         {(ocrState === null || ocrState === "error") && (isPDF(selectedFile) ? "🤖 PDF mit KI auslesen" : "🤖 Mit KI auslesen")}
                       </button>
                     )}
-                    {ocrState === "done" && <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>✓ Felder befüllt — bitte prüfen!</div>}
+                    {ocrState === "done" && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>
+                        ✓ {filledFieldCount} Felder befüllt — bitte prüfen!
+                      </div>
+                    )}
                     {ocrState === "error" && <div style={{ marginTop: 8, fontSize: 12, color: "var(--red)" }}>❌ {ocrError}</div>}
                   </div>
                 ) : (
@@ -153,7 +171,10 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                     placeholder="Zusätzliche Informationen..." style={{ resize: "none" }} /></div>
               );
               return (
-                <div key={field}><label>{FIELD_LABELS[field] || field}</label>
+                <div key={field}>
+                  <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
+                    {FIELD_LABELS[field] || field}{form[field] ? " ✓" : ""}
+                  </label>
                   <input
                     type={["beitrag","rate","betrag","restwert","laufzeit"].includes(field) ? "number" : "text"}
                     value={form[field] || ""} onChange={(e) => handleChange(field, e.target.value)}
@@ -168,7 +189,7 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
         <div style={{ display: "flex", gap: 12, paddingTop: 16, flexShrink: 0, borderTop: "1px solid var(--border)" }}>
           <button className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>Abbrechen</button>
           <button className="btn-primary" onClick={handleSave} style={{ flex: 2 }} disabled={saving}>
-            {saving ? "Wird gespeichert…" : entry ? "Speichern" : "Eintrag erstellen"}
+            {saving ? "Wird gespeichert…" : "Speichern"}
           </button>
         </div>
       </div>
