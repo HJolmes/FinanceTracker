@@ -1,25 +1,30 @@
 // src/components/Settings.js
 import React, { useState } from "react";
 import { getSettings, saveSettings } from "../services/settingsService";
+import { getClaudeApiKey, saveClaudeApiKey } from "../services/claudeService";
 
 export default function Settings() {
   const [settings, setSettings] = useState(getSettings());
-  const [saved, setSaved] = useState(false);
+  const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
+  const [savedPath, setSavedPath] = useState(false);
+  const [savedKey, setSavedKey] = useState(false);
 
   const handlePathChange = (value) => {
-    // Strip leading/trailing slashes
     setSettings((prev) => ({ ...prev, oneDriveFolderPath: value.replace(/^\/+|\/+$/g, "") }));
   };
 
-  const handleSave = () => {
+  const handleSavePath = () => {
     const path = settings.oneDriveFolderPath.trim();
-    if (!path) {
-      alert("Bitte einen Ordnerpfad eingeben.");
-      return;
-    }
+    if (!path) { alert("Bitte einen Ordnerpfad eingeben."); return; }
     saveSettings({ ...settings, oneDriveFolderPath: path });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setSavedPath(true);
+    setTimeout(() => setSavedPath(false), 2500);
+  };
+
+  const handleSaveKey = () => {
+    saveClaudeApiKey(claudeKey);
+    setSavedKey(true);
+    setTimeout(() => setSavedKey(false), 2500);
   };
 
   const previewPath = settings.oneDriveFolderPath || "…";
@@ -33,58 +38,61 @@ export default function Settings() {
 
       {/* OneDrive Path */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>☁️ OneDrive-Speicherpfad</div>
-          <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6 }}>
-            Ordner in deinem OneDrive, in dem Daten und Dokumente gespeichert werden.
-            Unterordner mit{" "}
-            <code style={{ background: "var(--bg3)", padding: "1px 5px", borderRadius: 4, fontSize: 12 }}>/</code>
-            {" "}trennen.
-          </div>
-        </div>
-
+        <div style={{ fontSize: 15, fontWeight: 600 }}>☁️ OneDrive-Speicherpfad</div>
         <div>
           <label>Pfad (relativ zur OneDrive-Wurzel)</label>
           <input
             type="text"
             value={settings.oneDriveFolderPath}
             onChange={(e) => handlePathChange(e.target.value)}
-            placeholder="z.B. Privat/Finanzen/FinanceTracker"
+            placeholder="z.B. Desktop/Privat/Finanzen"
           />
         </div>
-
-        {/* Live preview */}
         <div style={{
           background: "var(--bg3)", borderRadius: "var(--radius-sm)",
           padding: "12px 14px", fontSize: 12, color: "var(--text3)", lineHeight: 1.8,
         }}>
-          <div style={{ color: "var(--text2)", fontWeight: 600, marginBottom: 4 }}>Vorschau der Speicherorte:</div>
+          <div style={{ color: "var(--text2)", fontWeight: 600, marginBottom: 4 }}>Speicherorte:</div>
           <div>📄 <code>{previewPath}/data.json</code></div>
           <div>📁 <code>{previewPath}/Dokumente/&lt;kategorie&gt;/</code></div>
-          <div style={{ marginTop: 8, color: "var(--text3)", fontSize: 11 }}>
-            Beispiele: <code>FinanceTracker</code> · <code>Privat/Finanzen/FinanceTracker</code>
+        </div>
+        <button className="btn-primary" onClick={handleSavePath} style={{ alignSelf: "flex-start", minWidth: 180 }}>
+          {savedPath ? "✓ Gespeichert" : "Pfad speichern"}
+        </button>
+      </div>
+
+      {/* Claude API Key */}
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>🤖 Claude API-Key (KI-Erkennung)</div>
+          <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6 }}>
+            Wird benötigt, damit die KI nach dem OCR-Scan die Felder automatisch befüllt.
+            Deinen Key findest du unter{" "}
+            <code style={{ fontSize: 11, background: "var(--bg3)", padding: "1px 5px", borderRadius: 4 }}>console.anthropic.com</code>.
           </div>
         </div>
-
-        <button
-          className="btn-primary"
-          onClick={handleSave}
-          style={{ alignSelf: "flex-start", minWidth: 180 }}
-        >
-          {saved ? "✓ Gespeichert" : "Einstellungen speichern"}
+        <div>
+          <label>API-Key</label>
+          <input
+            type="password"
+            value={claudeKey}
+            onChange={(e) => setClaudeKey(e.target.value)}
+            placeholder="sk-ant-..."
+            autoComplete="off"
+          />
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6 }}>
+          ⚠️ Der Key wird nur in diesem Browser gespeichert (localStorage) und nie an Dritte gesendet — nur direkt an die Anthropic API.
+        </div>
+        <button className="btn-primary" onClick={handleSaveKey} style={{ alignSelf: "flex-start", minWidth: 180 }}>
+          {savedKey ? "✓ Gespeichert" : "Key speichern"}
         </button>
       </div>
 
       {/* Info */}
       <div className="card" style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.7 }}>
         <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>ℹ️ Hinweis</div>
-        <p>Der Pfad wird in diesem Browser gespeichert und wirkt sofort. PDFs liegen direkt
-        in OneDrive und sind dort ohne die App lesbar.</p>
-        <p style={{ marginTop: 8 }}>
-          <strong style={{ color: "var(--text)" }}>Wichtig:</strong> Wenn du den Pfad änderst,
-          werden bestehende Daten <em>nicht</em> automatisch in den neuen Ordner verschoben.
-          Bitte kopiere sie manuell in OneDrive.
-        </p>
+        <p>Wenn du den OneDrive-Pfad änderst, werden bestehende Daten <em>nicht</em> automatisch verschoben. Bitte kopiere sie manuell in OneDrive.</p>
       </div>
     </div>
   );
