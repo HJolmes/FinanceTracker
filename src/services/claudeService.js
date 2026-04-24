@@ -56,6 +56,13 @@ function getCategoryName(cat) {
   }[cat] || "Finanzdokument";
 }
 
+const TYPEN = {
+  versicherungen: "Krankenversicherung | Haftpflicht | Kfz | Berufsunfaehigkeit | Risikoleben | Hausrat | Gebaeude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige",
+  sparplaene: "ETF | Fonds | Aktienplan | Festgeld | Tagesgeld | Bausparvertrag | Sonstiges",
+  leasing: "Kfz-Leasing | Immobilienkredit | Ratenkredit | Dispositionskredit | Sonstiges",
+  bankkonten: "Girokonto | Tagesgeld | Festgeld | Depot | Gemeinschaftskonto | Sonstiges",
+};
+
 const DETECT_PROMPT = `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente.
 
 AUFGABE: Bestimme die Kategorie und extrahiere alle erkennbaren Felder.
@@ -72,27 +79,40 @@ Felder pro Kategorie (verwende GENAU diese Schluessel):
 - leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
 - bankkonten: name, bank, typ, iban, kontonummer
 
+Erlaubte Werte fuer "typ" (EXAKT so uebernehmen, keinen anderen Wert verwenden):
+- versicherungen: ${TYPEN.versicherungen}
+- sparplaene: ${TYPEN.sparplaene}
+- leasing: ${TYPEN.leasing}
+- bankkonten: ${TYPEN.bankkonten}
+
 Regeln:
 - Antworte NUR mit JSON, keine Erklaerung
 - Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
 - Daten: YYYY-MM-DD
 - Nur Felder die eindeutig erkennbar sind
 - intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
+- typ MUSS exakt einem der erlaubten Werte entsprechen
+- faelligkeit: naechster Zahlungstermin, Faelligkeitsdatum oder Vertragsbeginn
 
 Beispiel Ausgabe:
-{"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","beitrag":"8.90","intervall":"monatlich","polizzennummer":"HV-123456"}`;
+{"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich","polizzennummer":"HV-123456"}`;
 
 const FIELDS_PROMPT = (category, fieldList) =>
   `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente (${getCategoryName(category)}).
 
 Extrahiere diese Felder: ${fieldList}
 
+Erlaubte Werte fuer "typ" (EXAKT so uebernehmen):
+${TYPEN[category] || "Sonstige"}
+
 Regeln:
 - Antworte NUR mit JSON, keine Erklaerung
 - Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
 - Daten: YYYY-MM-DD
 - Nur Felder die eindeutig erkennbar sind
-- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig`;
+- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
+- typ MUSS exakt einem der erlaubten Werte entsprechen
+- faelligkeit: naechster Zahlungstermin, Faelligkeitsdatum oder Vertragsbeginn`;
 
 export async function mapTextToFields(text, category, fields) {
   const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
