@@ -7,6 +7,7 @@ export default function Settings() {
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
   const [savedPath, setSavedPath] = useState(false);
   const [savedKey, setSavedKey] = useState(false);
+  const [savedPersonal, setSavedPersonal] = useState(false);
 
   const handleSavePath = () => {
     const path = settings.oneDriveFolderPath.trim();
@@ -22,13 +23,50 @@ export default function Settings() {
     setTimeout(() => setSavedKey(false), 2500);
   };
 
+  const handleSavePersonal = () => {
+    saveSettings({ ...settings });
+    setSavedPersonal(true);
+    setTimeout(() => setSavedPersonal(false), 2500);
+  };
+
   const previewPath = settings.oneDriveFolderPath || "…";
+  const currentYear = new Date().getFullYear();
+  const geburtsjahr = parseInt(settings.geburtsjahr);
+  const alter = !isNaN(geburtsjahr) && geburtsjahr > 1900 ? currentYear - geburtsjahr : null;
+  const jahreZu67 = alter !== null ? Math.max(0, 67 - alter) : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, marginBottom: 4 }}>Einstellungen</div>
         <div style={{ fontSize: 13, color: "var(--text3)" }}>App-Konfiguration</div>
+      </div>
+
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>👤 Persönliche Daten</div>
+        <div>
+          <label>Geburtsjahr</label>
+          <input
+            type="number"
+            value={settings.geburtsjahr || ""}
+            onChange={(e) => setSettings((p) => ({ ...p, geburtsjahr: e.target.value }))}
+            placeholder="z.B. 1990"
+            min="1900"
+            max={currentYear}
+          />
+        </div>
+        {alter !== null && (
+          <div style={{ background: "var(--bg3)", borderRadius: "var(--radius-sm)", padding: "12px 14px", fontSize: 12, color: "var(--text3)", lineHeight: 1.8 }}>
+            <div>Aktuelles Alter: <span style={{ color: "var(--text)", fontWeight: 600 }}>{alter} Jahre</span></div>
+            {jahreZu67 > 0
+              ? <div>Jahre bis zur Rente (67): <span style={{ color: "var(--accent)", fontWeight: 600 }}>{jahreZu67} Jahre</span></div>
+              : <div style={{ color: "var(--green)", fontWeight: 600 }}>Rentenalter bereits erreicht</div>
+            }
+          </div>
+        )}
+        <button className="btn-primary" onClick={handleSavePersonal} style={{ alignSelf: "flex-start", minWidth: 180 }}>
+          {savedPersonal ? "✓ Gespeichert" : "Speichern"}
+        </button>
       </div>
 
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
