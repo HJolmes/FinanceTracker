@@ -3,6 +3,7 @@ import { MsalProvider, useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./services/authConfig";
 import { loadData, saveData } from "./services/oneDriveService";
+import { getRequisition, saveConnectedAccount, getPendingRequisition, clearPendingRequisition } from "./services/bankingService";
 import Dashboard from "./components/Dashboard";
 import EntryList from "./components/EntryList";
 import AddEntry from "./components/AddEntry";
@@ -24,14 +25,40 @@ function AppInner() {
   const [editEntry, setEditEntry] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [smartEntry, setSmartEntry] = useState(null);
+  const [nordigenNotice, setNordigenNotice] = useState("");
 
   useEffect(() => {
     if (isAuthenticated) {
       loadData(instance, accounts).then((d) => { setData(d); setLoading(false); });
+
+      // Rückkehr von Bank-Autorisierung prüfen
+      const pendingId = getPendingRequisition();
+      if (pendingId) {
+        clearPendingRequisition();
+        getRequisition(pendingId)
+          .then((req) => {
+            saveConnectedAccount({
+              requisitionId: pendingId,
+              institutionId: req.institution_id,
+              institutionName: req.institution_id,
+              status: req.status,
+              accountIds: req.accounts || [],
+              createdAt: new Date().toISOString(),
+            });
+            setNordigenNotice("✅ Bankkonto erfolgreich verbunden!");
+            setActiveTab("settings");
+            setTimeout(() => setNordigenNotice(""), 5000);
+          })
+          .catch(() => {
+            setNordigenNotice("❌ Bankverbindung fehlgeschlagen – bitte erneut versuchen.");
+            setActiveTab("settings");
+            setTimeout(() => setNordigenNotice(""), 5000);
+          });
+      }
     } else {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated]); // eslint-disable-line
 
   const handleSave = async (newData) => {
     setData(newData);
@@ -113,6 +140,12 @@ function AppInner() {
           </div>
         </div>
       </div>
+
+      {nordigenNotice && (
+        <div style={{ padding: "10px 20px", background: nordigenNotice.startsWith("✅") ? "var(--green)" : "var(--red)", color: "#fff", fontSize: 13, textAlign: "center" }}>
+          {nordigenNotice}
+        </div>
+      )}
 
       <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>
         {isSettings && <Settings />}
