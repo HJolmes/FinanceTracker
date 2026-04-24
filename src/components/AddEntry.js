@@ -9,9 +9,14 @@ const FIELD_LABELS = {
   beitrag: "Beitrag (€)", rate: "Rate (€)", betrag: "Betrag (€)", intervall: "Intervall",
   faelligkeit: "Fälligkeit", polizzennummer: "Policennummer", isin: "ISIN",
   depot: "Depot / Broker", startdatum: "Startdatum", laufzeit: "Laufzeit (Monate)",
-  restwert: "Restwert (€)", iban: "IBAN", kontonummer: "Kontonummer", notiz: "Notiz",
+  restwert: "Restwert (€)", iban: "IBAN", kontonummer: "Kontonummer",
+  rueckkaufswert: "Rückkaufswert (€)", monatsrenteJetzt: "Monatliche Rente jetzt (€)",
+  monatsrenteMit67: "Monatliche Rente mit 67 (€)", depotwert: "Aktueller Depotwert (€)",
+  kontostand: "Kontostand (€)", notiz: "Notiz",
 };
 
+const NUMBER_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
+const DECIMAL_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
 const INTERVALL_OPTIONS = ["monatlich", "quartalsweise", "halbjährlich", "jährlich", "einmalig"];
 
 export default function AddEntry({ category, entry, onSave, onClose, instance, accounts, pendingFile }) {
@@ -153,34 +158,60 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
 
             {config.fields.map((field) => {
               if (field === "typ") return (
-                <div key={field}><label>{FIELD_LABELS[field]}</label>
+                <div key={field}>
+                  <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
+                    {FIELD_LABELS[field]}{form[field] ? " ✓" : ""}
+                  </label>
                   <select value={form[field] || ""} onChange={(e) => handleChange(field, e.target.value)}>
                     <option value="">– Bitte wählen –</option>
                     {config.typen.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select></div>
+                  </select>
+                </div>
               );
               if (field === "intervall") return (
-                <div key={field}><label>{FIELD_LABELS[field]}</label>
+                <div key={field}>
+                  <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
+                    {FIELD_LABELS[field]}{form[field] ? " ✓" : ""}
+                  </label>
                   <select value={form[field] || "monatlich"} onChange={(e) => handleChange(field, e.target.value)}>
                     {INTERVALL_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select></div>
+                  </select>
+                </div>
               );
               if (field === "notiz") return (
                 <div key={field}><label>{FIELD_LABELS[field]}</label>
                   <textarea rows={3} value={form[field] || ""} onChange={(e) => handleChange(field, e.target.value)}
                     placeholder="Zusätzliche Informationen..." style={{ resize: "none" }} /></div>
               );
+              const isBestandField = ["rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"].includes(field);
               return (
                 <div key={field}>
+                  {isBestandField && field === "rueckkaufswert" && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
+                      Bestand / Wert (optional)
+                    </div>
+                  )}
+                  {isBestandField && field === "depotwert" && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
+                      Bestand / Wert (optional)
+                    </div>
+                  )}
+                  {isBestandField && field === "kontostand" && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
+                      Bestand / Wert (optional)
+                    </div>
+                  )}
                   <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
                     {FIELD_LABELS[field] || field}{form[field] ? " ✓" : ""}
                   </label>
                   <input
-                    type={["beitrag","rate","betrag","restwert","laufzeit"].includes(field) ? "number" : "text"}
-                    value={form[field] || ""} onChange={(e) => handleChange(field, e.target.value)}
+                    type={NUMBER_FIELDS.includes(field) ? "number" : "text"}
+                    value={form[field] || ""}
+                    onChange={(e) => handleChange(field, e.target.value)}
                     placeholder={field === "name" ? "z.B. Haftpflichtversicherung" : ""}
-                    step={["beitrag","rate","betrag","restwert"].includes(field) ? "0.01" : undefined}
-                  /></div>
+                    step={DECIMAL_FIELDS.includes(field) ? "0.01" : undefined}
+                  />
+                </div>
               );
             })}
           </div>
