@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { extractTextFromFile, isPDF } from "../services/ocrService";
 import { detectAndExtractFromText, detectAndExtractFromPDF, getClaudeApiKey } from "../services/claudeService";
+import { getSettings } from "../services/settingsService";
 
 const COLORS = ["#e8a838", "#4a9eff", "#3dd68c", "#a78bfa", "#f06060"];
 
 const CATEGORIES = {
   versicherungen: { label: "Versicherungen", icon: "🛡️" },
-  sparplaene: { label: "Sparäne", icon: "📈" },
+  sparplaene: { label: "Sparpläne", icon: "📈" },
   leasing: { label: "Leasing & Kredite", icon: "🚗" },
   bankkonten: { label: "Bankkonten", icon: "🏦" },
 };
@@ -19,6 +20,24 @@ function sumMonthly(entries) {
     if (e.intervall === "quartalsweise") return sum + b / 3;
     return sum + b;
   }, 0);
+}
+
+function sumField(entries, field) {
+  return entries.reduce((sum, e) => sum + parseFloat(e[field] || 0), 0);
+}
+
+function WealthRow({ label, value, color, suffix }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 13, color: "var(--text2)" }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: color || "var(--text)" }}>
+        {suffix
+          ? `${parseFloat(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${suffix}`
+          : parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })
+        }
+      </div>
+    </div>
+  );
 }
 
 function SmartUpload({ onSmartUpload }) {
@@ -74,7 +93,7 @@ function SmartUpload({ onSmartUpload }) {
 
       {hasKey && state === null && (
         <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "var(--bg3)", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: "14px 20px", cursor: "pointer", fontSize: 13, color: "var(--text2)" }}>
-          📎  PDF oder Foto auswählen
+          📎  PDF oder Foto auswählen
           <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
             onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
         </label>
@@ -135,10 +154,68 @@ export default function Dashboard({ data, onSmartUpload }) {
     ? new Date(data.lastUpdated).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
     : "–";
 
+  // Vermögensübersicht
+  const bankguthaben = sumField(data.bankkonten || [], "kontostand");
+  const depotwert = sumField(data.sparplaene || [], "depotwert");
+  const versicherungswert = sumField(data.versicherungen || [], "rueckkaufswert");
+  const gesamtvermoegen = bankguthaben + depotwert + versicherungswert;
+  const hasVermoegen = gesamtvermoegen > 0;
+
+  // Rentenvorschau
+  const monatsrenteJetzt = sumField(data.versicherungen || [], "monatsrenteJetzt");
+  const monatsrenteMit67 = sumField(data.versicherungen || [], "monatsrenteMit67");
+  const hasRente = monatsrenteJetzt > 0 || monatsrenteMit67 > 0;
+  const settings = getSettings();
+  const geburtsjahr = parseInt(settings.geburtsjahr) || null;
+  const currentYear = new Date().getFullYear();
+  const alter = geburtsjahr ? currentYear - geburtsjahr : null;
+  const jahreZu67 = alter !== null ? Math.max(0, 67 - alter) : null;
+
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
       <SmartUpload onSmartUpload={onSmartUpload} />
+
+      {(hasVermoegen || hasRente) && (
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>💰 Vermögensübersicht</div>
+
+          {hasVermoegen && (
+            <>
+              {bankguthaben > 0 && <WealthRow label="🏦 Bankguthaben" value={bankguthaben} color="var(--green)" />}
+              {depotwert > 0 && <WealthRow label="📈 Depotwert" value={depotwert} color="var(--green)" />}
+              {versicherungswert > 0 && <WealthRow label="🛡️ Versicherungswert (Rückkauf)" value={versicherungswert} color="var(--accent)" />}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, marginTop: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Gesamt</div>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--green)" }}>
+                  {gesamtvermoegen.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {hasRente && (
+            <>
+              {hasVermoegen && <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />}
+              <div style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Rentenvorschau</div>
+              {monatsrenteJetzt > 0 && <WealthRow label="Monatliche Rente (jetzt)" value={monatsrenteJetzt} suffix="€/Monat" color="var(--text2)" />}
+              {monatsrenteMit67 > 0 && <WealthRow label="Monatliche Rente (mit 67)" value={monatsrenteMit67} suffix="€/Monat" color="var(--green)" />}
+              {jahreZu67 !== null && (
+                <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>
+                  {jahreZu67 > 0
+                    ? `⏳ Noch ${jahreZu67} Jahre bis zum Rentenalter (67)`
+                    : "✅ Rentenalter bereits erreicht"}
+                </div>
+              )}
+              {!geburtsjahr && (
+                <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>
+                  💡 Geburtsjahr in ⚙️ Einstellungen hinterlegen für Rentenalter-Berechnung
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ background: "linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)", border: "1px solid var(--border)", borderRadius: 16, padding: "24px 20px", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(232,168,56,0.15) 0%, transparent 70%)" }} />
@@ -180,6 +257,7 @@ export default function Dashboard({ data, onSmartUpload }) {
         {Object.entries(CATEGORIES).map(([key, { label, icon }]) => {
           const entries = data[key] || [];
           const monthly = monthlyKosten[key];
+          const balance = key === "bankkonten" ? sumField(entries, "kontostand") : key === "sparplaene" ? sumField(entries, "depotwert") : 0;
           return (
             <div key={key} className="card" style={{ padding: 16 }}>
               <div style={{ fontSize: 22, marginBottom: 8 }}>{icon}</div>
@@ -187,6 +265,11 @@ export default function Dashboard({ data, onSmartUpload }) {
               <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--text)" }}>
                 {monthly > 0 ? monthly.toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : "—"}
               </div>
+              {balance > 0 && (
+                <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>
+                  {balance.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} Bestand
+                </div>
+              )}
               <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{entries.length} Einträge</div>
             </div>
           );
