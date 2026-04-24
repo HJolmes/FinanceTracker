@@ -56,8 +56,9 @@ function getCategoryName(cat) {
   }[cat] || "Finanzdokument";
 }
 
+// Werte muessen EXAKT den <option>-Werten in EntryList.js entsprechen
 const TYPEN = {
-  versicherungen: "Krankenversicherung | Haftpflicht | Kfz | Berufsunfaehigkeit | Risikoleben | Hausrat | Gebaeude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige",
+  versicherungen: "Krankenversicherung | Haftpflicht | Kfz | Berufsunfähigkeit | Risikoleben | Hausrat | Gebäude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige",
   sparplaene: "ETF | Fonds | Aktienplan | Festgeld | Tagesgeld | Bausparvertrag | Sonstiges",
   leasing: "Kfz-Leasing | Immobilienkredit | Ratenkredit | Dispositionskredit | Sonstiges",
   bankkonten: "Girokonto | Tagesgeld | Festgeld | Depot | Gemeinschaftskonto | Sonstiges",
@@ -79,11 +80,11 @@ Felder pro Kategorie (verwende GENAU diese Schluessel):
 - leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
 - bankkonten: name, bank, typ, iban, kontonummer
 
-Erlaubte Werte fuer "typ" (EXAKT so uebernehmen, keinen anderen Wert verwenden):
-- versicherungen: ${TYPEN.versicherungen}
-- sparplaene: ${TYPEN.sparplaene}
-- leasing: ${TYPEN.leasing}
-- bankkonten: ${TYPEN.bankkonten}
+Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
+- versicherungen: Krankenversicherung | Haftpflicht | Kfz | Berufsunfähigkeit | Risikoleben | Hausrat | Gebäude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige
+- sparplaene: ETF | Fonds | Aktienplan | Festgeld | Tagesgeld | Bausparvertrag | Sonstiges
+- leasing: Kfz-Leasing | Immobilienkredit | Ratenkredit | Dispositionskredit | Sonstiges
+- bankkonten: Girokonto | Tagesgeld | Festgeld | Depot | Gemeinschaftskonto | Sonstiges
 
 Regeln:
 - Antworte NUR mit JSON, keine Erklaerung
@@ -102,7 +103,7 @@ const FIELDS_PROMPT = (category, fieldList) =>
 
 Extrahiere diese Felder: ${fieldList}
 
-Erlaubte Werte fuer "typ" (EXAKT so uebernehmen):
+Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
 ${TYPEN[category] || "Sonstige"}
 
 Regeln:
