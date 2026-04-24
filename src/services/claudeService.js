@@ -69,16 +69,23 @@ const DETECT_PROMPT = `Du bist Experte fuer deutsche Finanz- und Versicherungsdo
 AUFGABE: Bestimme die Kategorie und extrahiere alle erkennbaren Felder.
 
 Kategorien:
-- versicherungen: Versicherungspolice, Beitragsrechnung einer Versicherung
-- sparplaene: ETF-Sparplan, Fonds, Bausparvertrag, Tagesgeld, Festgeld
+- versicherungen: Versicherungspolice, Beitragsrechnung, Standmitteilung einer Versicherung
+- sparplaene: ETF-Sparplan, Fonds, Bausparvertrag, Tagesgeld, Festgeld, Depotauszug
 - leasing: Fahrzeugleasing, Ratenkredit, Darlehensvertrag
 - bankkonten: Girokonto, Kontoauszug, IBAN-Dokument
 
 Felder pro Kategorie (verwende GENAU diese Schluessel):
-- versicherungen: name, anbieter, typ, beitrag, intervall, faelligkeit, polizzennummer
-- sparplaene: name, anbieter, typ, beitrag, intervall, depot, isin, startdatum
+- versicherungen: name, anbieter, typ, beitrag, intervall, faelligkeit, polizzennummer, rueckkaufswert, monatsrenteJetzt, monatsrenteMit67
+- sparplaene: name, anbieter, typ, beitrag, intervall, depot, isin, startdatum, depotwert
 - leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
-- bankkonten: name, bank, typ, iban, kontonummer
+- bankkonten: name, bank, typ, iban, kontonummer, kontostand
+
+Feldbeschreibungen fuer Bestandsfelder:
+- rueckkaufswert: aktueller Rueckkaufswert / Rueckkoufswert der Versicherung (z.B. aus Standmitteilung)
+- monatsrenteJetzt: prognostizierte monatliche Rente bei sofortigem Rentenbeginn
+- monatsrenteMit67: prognostizierte monatliche Rente bei Rentenbeginn mit 67 Jahren
+- depotwert: aktueller Gesamtwert des Depots / Portfolios
+- kontostand: aktueller Kontostand / Saldo
 
 Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
 - versicherungen: Krankenversicherung | Haftpflicht | Kfz | Berufsunfähigkeit | Risikoleben | Hausrat | Gebäude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige
@@ -93,7 +100,7 @@ Regeln:
 - Nur Felder die eindeutig erkennbar sind
 - intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
 - typ MUSS exakt einem der erlaubten Werte entsprechen
-- faelligkeit: naechster Zahlungstermin, Faelligkeitsdatum oder Vertragsbeginn
+- faelligkeit: naechster Zahlungstermin oder Vertragsbeginn
 
 Beispiel Ausgabe:
 {"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich","polizzennummer":"HV-123456"}`;
@@ -102,6 +109,13 @@ const FIELDS_PROMPT = (category, fieldList) =>
   `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente (${getCategoryName(category)}).
 
 Extrahiere diese Felder: ${fieldList}
+
+Feldbeschreibungen fuer Bestandsfelder:
+- rueckkaufswert: aktueller Rueckkaufswert der Versicherung (z.B. aus Standmitteilung)
+- monatsrenteJetzt: prognostizierte monatliche Rente bei sofortigem Rentenbeginn
+- monatsrenteMit67: prognostizierte monatliche Rente bei Rentenbeginn mit 67 Jahren
+- depotwert: aktueller Gesamtwert des Depots / Portfolios
+- kontostand: aktueller Kontostand / Saldo
 
 Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
 ${TYPEN[category] || "Sonstige"}
@@ -113,7 +127,7 @@ Regeln:
 - Nur Felder die eindeutig erkennbar sind
 - intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
 - typ MUSS exakt einem der erlaubten Werte entsprechen
-- faelligkeit: naechster Zahlungstermin, Faelligkeitsdatum oder Vertragsbeginn`;
+- faelligkeit: naechster Zahlungstermin oder Vertragsbeginn`;
 
 export async function mapTextToFields(text, category, fields) {
   const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
