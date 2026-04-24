@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { getSettings, saveSettings } from "../services/settingsService";
 import { getClaudeApiKey, saveClaudeApiKey } from "../services/claudeService";
+import BankingConnect from "./BankingConnect";
 
 export default function Settings() {
   const [settings, setSettings] = useState(getSettings());
@@ -8,6 +9,7 @@ export default function Settings() {
   const [savedPath, setSavedPath] = useState(false);
   const [savedKey, setSavedKey] = useState(false);
   const [savedPersonal, setSavedPersonal] = useState(false);
+  const [savedBanking, setSavedBanking] = useState(false);
 
   const handleSavePath = () => {
     const path = settings.oneDriveFolderPath.trim();
@@ -29,6 +31,12 @@ export default function Settings() {
     setTimeout(() => setSavedPersonal(false), 2500);
   };
 
+  const handleSaveBanking = () => {
+    saveSettings({ ...settings, bankingFunctionUrl: settings.bankingFunctionUrl?.trim() || "" });
+    setSavedBanking(true);
+    setTimeout(() => setSavedBanking(false), 2500);
+  };
+
   const previewPath = settings.oneDriveFolderPath || "…";
   const currentYear = new Date().getFullYear();
   const geburtsjahr = parseInt(settings.geburtsjahr);
@@ -42,26 +50,21 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: "var(--text3)" }}>App-Konfiguration</div>
       </div>
 
+      {/* Persönliche Daten */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>👤 Persönliche Daten</div>
         <div>
           <label>Geburtsjahr</label>
-          <input
-            type="number"
-            value={settings.geburtsjahr || ""}
+          <input type="number" value={settings.geburtsjahr || ""}
             onChange={(e) => setSettings((p) => ({ ...p, geburtsjahr: e.target.value }))}
-            placeholder="z.B. 1990"
-            min="1900"
-            max={currentYear}
-          />
+            placeholder="z.B. 1990" min="1900" max={currentYear} />
         </div>
         {alter !== null && (
           <div style={{ background: "var(--bg3)", borderRadius: "var(--radius-sm)", padding: "12px 14px", fontSize: 12, color: "var(--text3)", lineHeight: 1.8 }}>
             <div>Aktuelles Alter: <span style={{ color: "var(--text)", fontWeight: 600 }}>{alter} Jahre</span></div>
             {jahreZu67 > 0
-              ? <div>Jahre bis zur Rente (67): <span style={{ color: "var(--accent)", fontWeight: 600 }}>{jahreZu67} Jahre</span></div>
-              : <div style={{ color: "var(--green)", fontWeight: 600 }}>Rentenalter bereits erreicht</div>
-            }
+              ? <div>Jahre bis Rente (67): <span style={{ color: "var(--accent)", fontWeight: 600 }}>{jahreZu67} Jahre</span></div>
+              : <div style={{ color: "var(--green)", fontWeight: 600 }}>Rentenalter bereits erreicht</div>}
           </div>
         )}
         <button className="btn-primary" onClick={handleSavePersonal} style={{ alignSelf: "flex-start", minWidth: 180 }}>
@@ -69,6 +72,32 @@ export default function Settings() {
         </button>
       </div>
 
+      {/* Banking */}
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>🏦 Live-Bankdaten (GoCardless)</div>
+          <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6 }}>
+            Verbindet echte Bankkonten über Open Banking (PSD2). Kontostand wird live abgerufen.
+          </div>
+        </div>
+
+        <BankingConnect />
+
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text2)" }}>Azure Function URL</div>
+          <input type="text" value={settings.bankingFunctionUrl || ""}
+            onChange={(e) => setSettings((p) => ({ ...p, bankingFunctionUrl: e.target.value }))}
+            placeholder="https://deine-app.azurewebsites.net" />
+          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.6 }}>
+            URL deiner Azure Function App (ohne /api/banking). Siehe Setup-Anleitung.
+          </div>
+          <button className="btn-primary" onClick={handleSaveBanking} style={{ alignSelf: "flex-start", minWidth: 180, marginTop: 10 }}>
+            {savedBanking ? "✓ Gespeichert" : "URL speichern"}
+          </button>
+        </div>
+      </div>
+
+      {/* OneDrive */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>☁️ OneDrive-Speicherpfad</div>
         <div>
@@ -87,6 +116,7 @@ export default function Settings() {
         </button>
       </div>
 
+      {/* Claude API */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>🤖 Claude API-Key (KI-Erkennung)</div>
