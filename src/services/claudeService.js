@@ -1,5 +1,5 @@
-// src/services/claudeService.js
 const CLAUDE_KEY = "financetracker_claude_key";
+const MAX_PDF_MB = 4;
 
 export function getClaudeApiKey() {
   return localStorage.getItem(CLAUDE_KEY) || "";
@@ -10,27 +10,18 @@ export function saveClaudeApiKey(key) {
   else localStorage.removeItem(CLAUDE_KEY);
 }
 
-export async function mapTextToFields(text, category, fields) {
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function callClaude(content) {
   const apiKey = getClaudeApiKey();
   if (!apiKey) throw new Error("NO_KEY");
-
-  const fieldList = fields
-    .filter((f) => !["dokument", "notiz"].includes(f))
-    .join(", ");
-
-  const prompt = `Du bist Experte für deutsche Finanzdokumente (${getCategoryName(category)}).
-Hier ist der per OCR extrahierte Text:
-
-${text.slice(0, 4000)}
-
-Extrahiere exakt diese Felder soweit erkennbar: ${fieldList}
-Antworte NUR mit einem JSON-Objekt, keine Erklärung.
-Regeln:
-- Zahlen ohne Währungszeichen, Punkt als Dezimaltrennzeichen (z.B. 45.90)
-- Datumsfelder als YYYY-MM-DD
-- Nur Felder die du sicher erkannt hast
-Beispiel: {"name":"Allianz Haftpflicht","beitrag":"8.90","anbieter":"Allianz"}`;
-
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -41,30 +32,60 @@ Beispiel: {"name":"Allianz Haftpflicht","beitrag":"8.90","anbieter":"Allianz"}`;
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 512,
-      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1024,
+      messages: [{ role: "user", content }],
     }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error?.message || `HTTP ${res.status}`);
   }
-
   const data = await res.json();
-  const responseText = data.content?.[0]?.text || "";
-  const match = responseText.match(/\{[\s\S]*\}/);
+  const text = data.content?.[0]?.text || "";
+  const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("Keine Felder erkannt");
   return JSON.parse(match[0]);
 }
 
-function getCategoryName(category) {
-  const names = {
-    versicherungen: "Versicherungsvertrag",
-    sparplaene: "Sparplan / ETF",
-    leasing: "Leasing- oder Kreditvertrag",
-    bankkonten: "Bankdokument",
-    kredite: "Kreditvertrag",
-  };
-  return names[category] || "Finanzdokument";
+function getCategoryName(cat) {
+  return { versicherungen: "Versicherungsvertrag", sparplaene: "Sparplan/ETF", leasing: "Leasing/Kredit", bankkonten: "Bankdokument" }[cat] || "Finanzdokument";
+}
+
+const DETECT_FIELDS = `Felder je Kategorie:
+- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer
+- sparplaene: name,anbieter,typ,beitrag,intervall,depot,isin,startdatum
+- leasing: name,anbieter,typ,rate,intervall,laufzeit,restwert,faelligkeit
+- bankkonten: name,bank,typ,iban,kontonummer
+Nur JSON, keine Erklärung. Zahlen ohne €, Punkt als Dezimaltrennzeichen, Daten als YYYY-MM-DD.`;
+
+export async function mapTextToFields(text, category, fields) {
+  const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
+  return callClaude(`Finanzdokument (${getCategoryName(category)}). Extrahiere: ${fieldList}\n\nText:\n${text.slice(0, 3000)}\n\nNur JSON.`);
+}
+
+export async function mapPDFToFields(file, category, fields) {
+  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu groß (max ${MAX_PDF_MB} MB)`);
+  const base64 = await toBase64(file);
+  const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
+  return callClaude([
+    { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+    { type: "text", text: `Finanzdokument (${getCategoryName(category)}). Extrahiere: ${fieldList}. Nur JSON.` },
+  ]);
+}
+
+export async function detectAndExtractFromText(text) {
+  const result = await callClaude(`Analysiere deutschen Finanzdokument-Text. Bestimme category (versicherungen|sparplaene|leasing|bankkonten) und extrahiere Felder.\n\nText:\n${text.slice(0, 3000)}\n\n${DETECT_FIELDS}`);
+  if (!result.category) throw new Error("Kategorie nicht erkannt");
+  return result;
+}
+
+export async function detectAndExtractFromPDF(file) {
+  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu groß (max ${MAX_PDF_MB} MB)`);
+  const base64 = await toBase64(file);
+  const result = await callClaude([
+    { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+    { type: "text", text: `Analysiere dieses Finanzdokument. Bestimme category (versicherungen|sparplaene|leasing|bankkonten) und extrahiere Felder.\n\n${DETECT_FIELDS}` },
+  ]);
+  if (!result.category) throw new Error("Kategorie nicht erkannt");
+  return result;
 }

@@ -1,4 +1,3 @@
-// src/services/settingsService.js
 const SETTINGS_KEY = "financetracker_settings";
 const DEFAULT_PATH = "FinanceTracker";
 

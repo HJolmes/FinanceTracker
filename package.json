@@ -10,8 +10,7 @@
     "@azure/msal-react": "^2.0.9",
     "recharts": "^2.12.0",
     "lucide-react": "^0.383.0",
-    "tesseract.js": "^5.1.0",
-    "pdfjs-dist": "^4.4.168"
+    "tesseract.js": "^5.1.0"
   },
   "scripts": {
     "start": "react-scripts start",
