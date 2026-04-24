@@ -3,12 +3,12 @@ import React, { useState } from "react";
 const CATEGORY_CONFIG = {
   versicherungen: {
     label: "Versicherungen", icon: "🛡️",
-    fields: ["name","anbieter","typ","beitrag","intervall","faelligkeit","polizzennummer","notiz"],
+    fields: ["name","anbieter","typ","beitrag","intervall","faelligkeit","polizzennummer","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","notiz"],
     typen: ["Krankenversicherung","Haftpflicht","Kfz","Berufsunfähigkeit","Risikoleben","Hausrat","Gebäude","Rechtsschutz","Unfallversicherung","Reiseversicherung","Lebensversicherung","Rentenversicherung","Sonstige"],
   },
   sparplaene: {
-    label: "Sparäne & ETF", icon: "📈",
-    fields: ["name","anbieter","typ","beitrag","intervall","depot","isin","startdatum","notiz"],
+    label: "Sparpläne & ETF", icon: "📈",
+    fields: ["name","anbieter","typ","beitrag","intervall","depot","isin","startdatum","depotwert","notiz"],
     typen: ["ETF","Fonds","Aktienplan","Festgeld","Tagesgeld","Bausparvertrag","Sonstiges"],
   },
   leasing: {
@@ -18,7 +18,7 @@ const CATEGORY_CONFIG = {
   },
   bankkonten: {
     label: "Bankkonten", icon: "🏦",
-    fields: ["name","bank","typ","iban","kontonummer","notiz"],
+    fields: ["name","bank","typ","iban","kontonummer","kontostand","notiz"],
     typen: ["Girokonto","Tagesgeld","Festgeld","Depot","Gemeinschaftskonto","Sonstiges"],
   },
 };
@@ -38,10 +38,22 @@ function InfoRow({ label, value }) {
   );
 }
 
+function BestandRow({ label, value, highlight }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 12, color: "var(--text3)" }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: highlight ? "var(--green)" : "var(--accent)" }}>
+        {parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+      </div>
+    </div>
+  );
+}
+
 function EntryCard({ category, entry, onDelete, onEdit }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const value = getMainValue(category, entry);
+  const hasBestand = entry.rueckkaufswert || entry.monatsrenteJetzt || entry.monatsrenteMit67 || entry.depotwert || entry.kontostand;
 
   return (
     <div className="card fade-in" style={{ padding: 16, marginBottom: 12 }}>
@@ -62,6 +74,11 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
               <div style={{ fontSize: 11, color: "var(--text3)" }}>{entry.intervall || "monatl."}</div>
             </>
           )}
+          {entry.kontostand && !value && (
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--green)" }}>
+              {parseFloat(entry.kontostand).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -78,6 +95,18 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
             {entry.iban && <InfoRow label="IBAN" value={entry.iban} />}
             {entry.kontonummer && <InfoRow label="Kontonr." value={entry.kontonummer} />}
           </div>
+
+          {hasBestand && (
+            <div style={{ background: "var(--bg3)", borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Bestand / Wert</div>
+              {entry.rueckkaufswert && <BestandRow label="Rückkaufswert (aktuell)" value={entry.rueckkaufswert} />}
+              {entry.depotwert && <BestandRow label="Depotwert (aktuell)" value={entry.depotwert} highlight />}
+              {entry.kontostand && <BestandRow label="Kontostand (aktuell)" value={entry.kontostand} highlight />}
+              {entry.monatsrenteJetzt && <BestandRow label="Monatliche Rente (jetzt)" value={entry.monatsrenteJetzt} />}
+              {entry.monatsrenteMit67 && <BestandRow label="Monatliche Rente (mit 67)" value={entry.monatsrenteMit67} highlight />}
+            </div>
+          )}
+
           {entry.notiz && (
             <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "var(--text2)", marginBottom: 16 }}>
               📝 {entry.notiz}
