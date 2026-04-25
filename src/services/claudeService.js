@@ -49,7 +49,6 @@ async function callClaude(content) {
   return JSON.parse(match[0]);
 }
 
-// Kompakte Typ-Listen (exakt wie Dropdown-Werte)
 const TYPEN = {
   versicherungen: "Krankenversicherung|Haftpflicht|Kfz|Berufsunfähigkeit|Risikoleben|Hausrat|Gebäude|Rechtsschutz|Unfallversicherung|Reiseversicherung|Lebensversicherung|Rentenversicherung|Sonstige",
   sparplaene: "ETF|Fonds|Aktienplan|Festgeld|Tagesgeld|Bausparvertrag|Sonstiges",
@@ -59,7 +58,6 @@ const TYPEN = {
 
 const INTERVALL = "monatlich|quartalsweise|halbjaehrlich|jaehrlich|einmalig";
 
-// ~250 Tokens statt ~800
 const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument. Antworte NUR mit JSON, keine Erklaerung.
 
 Kategorie: versicherungen|sparplaene|leasing|bankkonten
@@ -78,7 +76,6 @@ intervall: ${INTERVALL}
 Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie angegeben, nur sichere Felder.
 Beispiel: {"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich"}`;
 
-// ~150 Tokens statt ~500
 const FIELDS_PROMPT = (category, fieldList) =>
   `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}
 typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten
@@ -87,6 +84,10 @@ Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, nur sichere Felder, NUR 
 
 const DOC_TYPE_PROMPT = `Dokumenttyp als JSON: {"typ":"..."}
 Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Sonstiges`;
+
+const RECEIPT_PROMPT = `Analysiere diesen Beleg/Kassenbon. Antworte NUR mit JSON.
+Felder: datum (YYYY-MM-DD), betrag (Zahl ohne €), mwst (MwSt-Satz als Zahl z.B. 19), partner (Firma/Lieferant), beschreibung (kurze Beschreibung), kategorie (Bewirtung|Fahrtkosten|Arbeitsmittel|Fortbildung|Bürobedarf|Sonstiges), zweck (geschäftlicher Zweck).
+Nur sichere Felder, NUR JSON.`;
 
 export function buildDocumentName(typ, anbieter) {
   const date = new Date().toISOString().slice(0, 10);
@@ -141,4 +142,18 @@ export async function detectAndExtractFromPDF(file) {
   ]);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
+}
+
+export async function extractReceiptFields(file) {
+  if (!getClaudeApiKey()) return {};
+  try {
+    const base64 = await toBase64(file);
+    const mediaType = file.type || (isPdf(file) ? "application/pdf" : "image/jpeg");
+    const content = isPdf(file)
+      ? [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: RECEIPT_PROMPT }]
+      : [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: RECEIPT_PROMPT }];
+    return await callClaude(content);
+  } catch {
+    return {};
+  }
 }
