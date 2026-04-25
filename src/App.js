@@ -7,7 +7,9 @@ import { detectDocumentType, buildDocumentName } from "./services/claudeService"
 import { getRequisition, saveConnectedAccount, getPendingRequisition, clearPendingRequisition } from "./services/bankingService";
 import Dashboard from "./components/Dashboard";
 import EntryList from "./components/EntryList";
+import TaxReceipts from "./components/TaxReceipts";
 import AddEntry from "./components/AddEntry";
+import AddReceipt from "./components/AddReceipt";
 import LoginScreen from "./components/LoginScreen";
 import NavBar from "./components/NavBar";
 import Settings from "./components/Settings";
@@ -82,7 +84,7 @@ function AppInner() {
   const handleAddEntry = async (category, entry) => {
     const newData = {
       ...data,
-      [category]: [...(data[category] || []), { ...entry, id: Date.now().toString() }],
+      [category]: [...(data[category] || []), { ...entry, id: entry.id || Date.now().toString() }],
       lastUpdated: new Date().toISOString(),
     };
     await handleSave(newData);
@@ -152,6 +154,7 @@ function AppInner() {
   );
 
   const isSettings = activeTab === "settings";
+  const isTax = activeTab === "steuerbelege";
   const showFab = !isSettings && activeTab !== "dashboard";
 
   const mainContent = (
@@ -160,7 +163,14 @@ function AppInner() {
       {!isSettings && activeTab === "dashboard" && (
         <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
       )}
-      {!isSettings && activeTab !== "dashboard" && (
+      {!isSettings && isTax && (
+        <TaxReceipts
+          receipts={data.steuerbelege || []}
+          onDelete={(id) => handleDeleteEntry("steuerbelege", id)}
+          onEdit={(entry) => setEditEntry(entry)}
+        />
+      )}
+      {!isSettings && !isTax && activeTab !== "dashboard" && (
         <EntryList
           category={activeTab}
           entries={data[activeTab] || []}
@@ -175,7 +185,22 @@ function AppInner() {
 
   const modals = (
     <>
-      {(showAdd || editEntry) && !smartEntry && (
+      {isTax && showAdd && (
+        <AddReceipt
+          onSave={(entry) => handleAddEntry("steuerbelege", entry)}
+          onClose={() => setShowAdd(false)}
+          instance={instance} accounts={accounts}
+        />
+      )}
+      {isTax && editEntry && (
+        <AddReceipt
+          receipt={editEntry}
+          onSave={(entry) => handleUpdateEntry("steuerbelege", editEntry.id, entry)}
+          onClose={() => setEditEntry(null)}
+          instance={instance} accounts={accounts}
+        />
+      )}
+      {!isTax && (showAdd || editEntry) && !smartEntry && (
         <AddEntry
           category={activeTab} entry={editEntry}
           onSave={(entry) => editEntry ? handleUpdateEntry(activeTab, editEntry.id, entry) : handleAddEntry(activeTab, entry)}
