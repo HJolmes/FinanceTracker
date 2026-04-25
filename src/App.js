@@ -16,9 +16,21 @@ import "./index.css";
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
+function useIsDesktop() {
+  const [d, setD] = useState(() => window.innerWidth >= 768);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const h = (e) => setD(e.matches);
+    mq.addEventListener("change", h);
+    return () => mq.removeEventListener("change", h);
+  }, []);
+  return d;
+}
+
 function AppInner() {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
+  const isDesktop = useIsDesktop();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +108,6 @@ function AppInner() {
     await handleSave(newData);
   };
 
-  // Dokument zu bestehender Police hinzufügen (aus SmartUpload)
   const handleAddDocumentToEntry = async (category, entryId, extractedFields, file) => {
     const entry = (data[category] || []).find((e) => e.id === entryId);
     if (!entry) return;
@@ -141,6 +152,80 @@ function AppInner() {
   );
 
   const isSettings = activeTab === "settings";
+  const showFab = !isSettings && activeTab !== "dashboard";
+
+  const mainContent = (
+    <>
+      {isSettings && <Settings />}
+      {!isSettings && activeTab === "dashboard" && (
+        <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
+      )}
+      {!isSettings && activeTab !== "dashboard" && (
+        <EntryList
+          category={activeTab}
+          entries={data[activeTab] || []}
+          onDelete={(id) => handleDeleteEntry(activeTab, id)}
+          onEdit={(entry) => setEditEntry(entry)}
+          instance={instance}
+          accounts={accounts}
+        />
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
+      {(showAdd || editEntry) && !smartEntry && (
+        <AddEntry
+          category={activeTab} entry={editEntry}
+          onSave={(entry) => editEntry ? handleUpdateEntry(activeTab, editEntry.id, entry) : handleAddEntry(activeTab, entry)}
+          onClose={() => { setShowAdd(false); setEditEntry(null); }}
+          instance={instance} accounts={accounts}
+        />
+      )}
+      {smartEntry && (
+        <AddEntry
+          category={smartEntry.category} entry={smartEntry.data} pendingFile={smartEntry.file}
+          onSave={(entry) => { handleAddEntry(smartEntry.category, entry); setSmartEntry(null); }}
+          onClose={() => setSmartEntry(null)}
+          instance={instance} accounts={accounts}
+        />
+      )}
+    </>
+  );
+
+  if (isDesktop) {
+    return (
+      <div style={{ display: "flex", height: "100%" }}>
+        <NavBar
+          active={isSettings ? null : activeTab}
+          onChange={handleNavChange}
+          mode="sidebar"
+          syncing={syncing}
+          onSettings={() => handleNavChange("settings")}
+          onLogout={() => instance.logout()}
+        />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {nordigenNotice && (
+            <div style={{ padding: "10px 24px", background: nordigenNotice.startsWith("✅") ? "var(--green)" : "var(--red)", color: "#fff", fontSize: 13 }}>
+              {nordigenNotice}
+            </div>
+          )}
+          <div className="scroll" style={{ flex: 1, padding: "24px 40px" }}>
+            <div style={{ maxWidth: 900, margin: "0 auto" }}>
+              {mainContent}
+            </div>
+          </div>
+        </div>
+        {showFab && (
+          <button className="btn-primary" onClick={() => setShowAdd(true)}
+            style={{ position: "fixed", bottom: 32, right: 32, borderRadius: "50%", width: 56, height: 56, fontSize: 24, padding: 0, boxShadow: "0 4px 20px rgba(232,168,56,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >+</button>
+        )}
+        {modals}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 480, margin: "0 auto" }}>
@@ -172,47 +257,17 @@ function AppInner() {
       )}
 
       <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>
-        {isSettings && <Settings />}
-        {!isSettings && activeTab === "dashboard" && (
-          <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
-        )}
-        {!isSettings && activeTab !== "dashboard" && (
-          <EntryList
-            category={activeTab}
-            entries={data[activeTab] || []}
-            onDelete={(id) => handleDeleteEntry(activeTab, id)}
-            onEdit={(entry) => setEditEntry(entry)}
-            instance={instance}
-            accounts={accounts}
-          />
-        )}
+        {mainContent}
       </div>
 
-      {!isSettings && activeTab !== "dashboard" && (
+      {showFab && (
         <button className="btn-primary" onClick={() => setShowAdd(true)}
           style={{ position: "fixed", bottom: 90, right: 20, borderRadius: "50%", width: 56, height: 56, fontSize: 24, padding: 0, boxShadow: "0 4px 20px rgba(232,168,56,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
         >+</button>
       )}
 
       <NavBar active={isSettings ? null : activeTab} onChange={handleNavChange} />
-
-      {(showAdd || editEntry) && !smartEntry && (
-        <AddEntry
-          category={activeTab} entry={editEntry}
-          onSave={(entry) => editEntry ? handleUpdateEntry(activeTab, editEntry.id, entry) : handleAddEntry(activeTab, entry)}
-          onClose={() => { setShowAdd(false); setEditEntry(null); }}
-          instance={instance} accounts={accounts}
-        />
-      )}
-
-      {smartEntry && (
-        <AddEntry
-          category={smartEntry.category} entry={smartEntry.data} pendingFile={smartEntry.file}
-          onSave={(entry) => { handleAddEntry(smartEntry.category, entry); setSmartEntry(null); }}
-          onClose={() => setSmartEntry(null)}
-          instance={instance} accounts={accounts}
-        />
-      )}
+      {modals}
     </div>
   );
 }
