@@ -10,21 +10,27 @@ const FIELD_LABELS = {
   faelligkeit: "Fälligkeit", polizzennummer: "Policennummer", isin: "ISIN",
   depot: "Depot / Broker", startdatum: "Startdatum", laufzeit: "Laufzeit (Monate)",
   restwert: "Restwert (€)", iban: "IBAN", kontonummer: "Kontonummer",
-  rueckkaufswert: "Rückkaufswert (€)", monatsrenteJetzt: "Monatliche Rente jetzt (€)",
-  monatsrenteMit67: "Monatliche Rente mit 67 (€)", depotwert: "Aktueller Depotwert (€)",
+  rueckkaufswert: "Rückkaufswert (€)",
+  monatsrenteJetzt: "Monatliche Rente aktuell (€)",
+  renteMit67Niedrig: "Rente mit 67 – pessimistisch (€)",
+  renteMit67Hoch: "Rente mit 67 – optimistisch (€)",
+  renteGarantiert: "Garantierte Rente mit 67 (€, Rentenbescheid)",
+  depotwert: "Aktueller Depotwert (€)",
   kontostand: "Kontostand (€)", notiz: "Notiz",
 };
 
-const NUMBER_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
-const DECIMAL_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
-const INTERVALL_OPTIONS = ["monatlich", "quartalsweise", "halbjährlich", "jährlich", "einmalig"];
+const NUMBER_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert",
+  "monatsrenteJetzt","renteMit67Niedrig","renteMit67Hoch","renteGarantiert",
+  "depotwert","kontostand"];
+const DECIMAL_FIELDS = NUMBER_FIELDS;
+const INTERVALL_OPTIONS = ["monatlich", "quartalweise", "halbjährlich", "jährlich", "einmalig"];
 const BESTAND_FIRST = ["rueckkaufswert", "depotwert", "kontostand"];
+const RENTE_FIRST = ["monatsrenteJetzt"];
 
 export default function AddEntry({ category, entry, onSave, onClose, instance, accounts, pendingFile }) {
   const config = CATEGORY_CONFIG[category];
   const [form, setForm] = useState(() => {
     const base = entry || {};
-    // Normalize legacy single-dokument to dokumente array
     if (base.dokument && !base.dokumente?.length) {
       return { ...base, dokumente: [{ url: base.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] };
     }
@@ -146,14 +152,11 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                 {uploading && (
                   <div style={{ fontSize: 13, color: "var(--text3)", textAlign: "center", marginBottom: 8 }}>⏳ Wird hochgeladen…</div>
                 )}
-
                 {isFromSmartUpload && !uploading && filledFieldCount > 0 && (
                   <div style={{ fontSize: 12, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
                     ✓ {filledFieldCount} Felder von KI erkannt — bitte prüfen!
                   </div>
                 )}
-
-                {/* Dokumentenliste */}
                 {dokumente.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
                     {dokumente.map((doc, i) => (
@@ -171,8 +174,6 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                     ))}
                   </div>
                 )}
-
-                {/* KI auslesen für aktuellstes Dokument */}
                 {!isFromSmartUpload && hasApiKey && latestFile && ocrState !== "done" && (
                   <button className="btn-secondary" onClick={() => handleExtract(dokumente[0]?.file)}
                     disabled={ocrState === "ocr" || ocrState === "ai"}
@@ -188,8 +189,6 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                   </div>
                 )}
                 {ocrState === "error" && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>❌ {ocrError}</div>}
-
-                {/* Upload-Button */}
                 <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "var(--surface2)", padding: "8px 16px", borderRadius: "var(--radius-sm)", cursor: "pointer", fontSize: 13, border: "1px solid var(--border)", color: "var(--text2)" }}>
                   {uploading ? "⏳ Wird hochgeladen…" : dokumente.length > 0 ? "+ Weiteres Dokument" : "📄 Dokument auswählen"}
                   <input type="file" accept=".pdf,image/*" style={{ display: "none" }} disabled={uploading}
@@ -227,6 +226,8 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                     placeholder="Zusätzliche Informationen..." style={{ resize: "none" }} /></div>
               );
               const isBestandFirst = BESTAND_FIRST.includes(field);
+              const isRenteFirst = RENTE_FIRST.includes(field);
+              const isRenteSpanneFirst = field === "renteMit67Niedrig";
               return (
                 <div key={field}>
                   {isBestandFirst && (
@@ -234,9 +235,19 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                       Bestand / Wert (optional — wird aus Dokumenten ausgelesen)
                     </div>
                   )}
-                  {field === "monatsrenteJetzt" && (
+                  {isRenteFirst && (
                     <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
                       Rentenvorschau (aus Standmitteilung)
+                    </div>
+                  )}
+                  {isRenteSpanneFirst && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
+                      Renten-Spanne mit 67 (Standmitteilung: niedrig – hoch)
+                    </div>
+                  )}
+                  {field === "renteGarantiert" && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
+                      Garantierte Rente (nur bei Rentenbescheid)
                     </div>
                   )}
                   <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
