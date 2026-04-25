@@ -55,19 +55,15 @@ function AppInner() {
           localStorage.setItem("ft_seen_version", APP_VERSION);
         }
       });
-
       const pendingId = getPendingRequisition();
       if (pendingId) {
         clearPendingRequisition();
         getRequisition(pendingId)
           .then((req) => {
             saveConnectedAccount({
-              requisitionId: pendingId,
-              institutionId: req.institution_id,
-              institutionName: req.institution_id,
-              status: req.status,
-              accountIds: req.accounts || [],
-              createdAt: new Date().toISOString(),
+              requisitionId: pendingId, institutionId: req.institution_id,
+              institutionName: req.institution_id, status: req.status,
+              accountIds: req.accounts || [], createdAt: new Date().toISOString(),
             });
             setNordigenNotice("✅ Bankkonto erfolgreich verbunden!");
             setActiveTab("settings");
@@ -120,6 +116,20 @@ function AppInner() {
     await handleSave(newData);
   };
 
+  // Einzelnes Dokument aus einem Eintrag entfernen
+  const handleDeleteDocument = async (category, entryId, docIndex) => {
+    const entry = (data[category] || []).find((e) => e.id === entryId);
+    if (!entry) return;
+    const newDokumente = (entry.dokumente || []).filter((_, i) => i !== docIndex);
+    const updatedEntry = { ...entry, dokumente: newDokumente, dokument: newDokumente[0]?.url || "" };
+    const newData = {
+      ...data,
+      [category]: data[category].map((e) => (e.id === entryId ? updatedEntry : e)),
+      lastUpdated: new Date().toISOString(),
+    };
+    await handleSave(newData);
+  };
+
   const handleAddDocumentToEntry = async (category, entryId, extractedFields, file) => {
     const entry = (data[category] || []).find((e) => e.id === entryId);
     if (!entry) return;
@@ -132,9 +142,7 @@ function AppInner() {
       const newDoc = { url, name, typ, datum: new Date().toISOString().slice(0, 10) };
       const { category: _cat, ...fields } = extractedFields;
       const updatedEntry = {
-        ...entry,
-        ...fields,
-        dokument: url,
+        ...entry, ...fields, dokument: url,
         dokumente: [newDoc, ...(entry.dokumente || [])],
       };
       await handleUpdateEntry(category, entryId, updatedEntry);
@@ -143,23 +151,13 @@ function AppInner() {
     }
   };
 
-  const handleNavChange = (tab) => {
-    setActiveTab(tab);
-    setShowAdd(false);
-    setEditEntry(null);
-  };
-
-  const handleSmartUpload = (category, fields, file) => {
-    setSmartEntry({ category, data: fields, file });
-  };
+  const handleNavChange = (tab) => { setActiveTab(tab); setShowAdd(false); setEditEntry(null); };
+  const handleSmartUpload = (category, fields, file) => setSmartEntry({ category, data: fields, file });
 
   if (!isAuthenticated) return <LoginScreen onLogin={() => instance.loginPopup(loginRequest)} />;
   if (loading || !data) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text2)" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-        <div>Lade Daten aus OneDrive…</div>
-      </div>
+      <div style={{ textAlign: "center" }}><div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div><div>Lade Daten aus OneDrive…</div></div>
     </div>
   );
 
@@ -174,11 +172,9 @@ function AppInner() {
         <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
       )}
       {!isSettings && isTax && (
-        <TaxReceipts
-          receipts={data.steuerbelege || []}
+        <TaxReceipts receipts={data.steuerbelege || []}
           onDelete={(id) => handleDeleteEntry("steuerbelege", id)}
-          onEdit={(entry) => setEditEntry(entry)}
-        />
+          onEdit={(entry) => setEditEntry(entry)} />
       )}
       {!isSettings && !isTax && activeTab !== "dashboard" && (
         <EntryList
@@ -186,8 +182,8 @@ function AppInner() {
           entries={data[activeTab] || []}
           onDelete={(id) => handleDeleteEntry(activeTab, id)}
           onEdit={(entry) => setEditEntry(entry)}
-          instance={instance}
-          accounts={accounts}
+          onDeleteDocument={(entryId, docIndex) => handleDeleteDocument(activeTab, entryId, docIndex)}
+          instance={instance} accounts={accounts}
         />
       )}
     </>
@@ -195,70 +191,48 @@ function AppInner() {
 
   const modals = (
     <>
-      {isTax && showAdd && (
-        <AddReceipt
-          onSave={(entry) => handleAddEntry("steuerbelege", entry)}
-          onClose={() => setShowAdd(false)}
-          instance={instance} accounts={accounts}
-        />
-      )}
-      {isTax && editEntry && (
-        <AddReceipt
-          receipt={editEntry}
-          onSave={(entry) => handleUpdateEntry("steuerbelege", editEntry.id, entry)}
-          onClose={() => setEditEntry(null)}
-          instance={instance} accounts={accounts}
-        />
-      )}
+      {isTax && showAdd && <AddReceipt onSave={(entry) => handleAddEntry("steuerbelege", entry)} onClose={() => setShowAdd(false)} instance={instance} accounts={accounts} />}
+      {isTax && editEntry && <AddReceipt receipt={editEntry} onSave={(entry) => handleUpdateEntry("steuerbelege", editEntry.id, entry)} onClose={() => setEditEntry(null)} instance={instance} accounts={accounts} />}
       {!isTax && (showAdd || editEntry) && !smartEntry && (
-        <AddEntry
-          category={activeTab} entry={editEntry}
+        <AddEntry category={activeTab} entry={editEntry}
           onSave={(entry) => editEntry ? handleUpdateEntry(activeTab, editEntry.id, entry) : handleAddEntry(activeTab, entry)}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
-          instance={instance} accounts={accounts}
-        />
+          instance={instance} accounts={accounts} />
       )}
       {smartEntry && (
-        <AddEntry
-          category={smartEntry.category} entry={smartEntry.data} pendingFile={smartEntry.file}
+        <AddEntry category={smartEntry.category} entry={smartEntry.data} pendingFile={smartEntry.file}
           onSave={(entry) => { handleAddEntry(smartEntry.category, entry); setSmartEntry(null); }}
           onClose={() => setSmartEntry(null)}
-          instance={instance} accounts={accounts}
-        />
+          instance={instance} accounts={accounts} />
       )}
       {showWhatsNew && <WhatsNew onClose={() => setShowWhatsNew(false)} />}
     </>
   );
 
+  const fab = showFab && (
+    <button className="btn-primary" onClick={() => setShowAdd(true)}
+      style={{ position: "fixed", bottom: isDesktop ? 32 : 90, right: isDesktop ? 32 : 20, borderRadius: "50%", width: 56, height: 56, fontSize: 24, padding: 0, boxShadow: "0 4px 20px rgba(232,168,56,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
+    >+</button>
+  );
+
+  const notice = nordigenNotice && (
+    <div style={{ padding: "10px 20px", background: nordigenNotice.startsWith("✅") ? "var(--green)" : "var(--red)", color: "#fff", fontSize: 13, textAlign: "center" }}>
+      {nordigenNotice}
+    </div>
+  );
+
   if (isDesktop) {
     return (
       <div style={{ display: "flex", height: "100%" }}>
-        <NavBar
-          active={isSettings ? null : activeTab}
-          onChange={handleNavChange}
-          mode="sidebar"
-          syncing={syncing}
-          onSettings={() => handleNavChange("settings")}
-          onLogout={() => instance.logout()}
-        />
+        <NavBar active={isSettings ? null : activeTab} onChange={handleNavChange} mode="sidebar"
+          syncing={syncing} onSettings={() => handleNavChange("settings")} onLogout={() => instance.logout()} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {nordigenNotice && (
-            <div style={{ padding: "10px 24px", background: nordigenNotice.startsWith("✅") ? "var(--green)" : "var(--red)", color: "#fff", fontSize: 13 }}>
-              {nordigenNotice}
-            </div>
-          )}
+          {notice}
           <div className="scroll" style={{ flex: 1, padding: "24px 40px" }}>
-            <div style={{ maxWidth: 900, margin: "0 auto" }}>
-              {mainContent}
-            </div>
+            <div style={{ maxWidth: 900, margin: "0 auto" }}>{mainContent}</div>
           </div>
         </div>
-        {showFab && (
-          <button className="btn-primary" onClick={() => setShowAdd(true)}
-            style={{ position: "fixed", bottom: 32, right: 32, borderRadius: "50%", width: 56, height: 56, fontSize: 24, padding: 0, boxShadow: "0 4px 20px rgba(232,168,56,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
-          >+</button>
-        )}
-        {modals}
+        {fab}{modals}
       </div>
     );
   }
@@ -277,31 +251,15 @@ function AppInner() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button className="btn-ghost"
-              style={{ fontSize: 18, padding: "8px 10px", color: isSettings ? "var(--accent)" : undefined }}
-              onClick={() => handleNavChange(isSettings ? "dashboard" : "settings")}
-            >⚙️</button>
+            <button className="btn-ghost" style={{ fontSize: 18, padding: "8px 10px", color: isSettings ? "var(--accent)" : undefined }}
+              onClick={() => handleNavChange(isSettings ? "dashboard" : "settings")}>⚙️</button>
             <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => instance.logout()}>Abmelden</button>
           </div>
         </div>
       </div>
-
-      {nordigenNotice && (
-        <div style={{ padding: "10px 20px", background: nordigenNotice.startsWith("✅") ? "var(--green)" : "var(--red)", color: "#fff", fontSize: 13, textAlign: "center" }}>
-          {nordigenNotice}
-        </div>
-      )}
-
-      <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>
-        {mainContent}
-      </div>
-
-      {showFab && (
-        <button className="btn-primary" onClick={() => setShowAdd(true)}
-          style={{ position: "fixed", bottom: 90, right: 20, borderRadius: "50%", width: 56, height: 56, fontSize: 24, padding: 0, boxShadow: "0 4px 20px rgba(232,168,56,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >+</button>
-      )}
-
+      {notice}
+      <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>{mainContent}</div>
+      {fab}
       <NavBar active={isSettings ? null : activeTab} onChange={handleNavChange} />
       {modals}
     </div>
