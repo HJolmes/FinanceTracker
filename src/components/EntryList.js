@@ -32,7 +32,7 @@ const CATEGORY_CONFIG = {
 const ETF_TYPEN = ["ETF", "Fonds", "Aktienplan"];
 
 function shouldShowChart(entry) {
-  return entry.ticker || ETF_TYPEN.includes(entry.typ);
+  return entry.ticker || entry.isin || ETF_TYPEN.includes(entry.typ);
 }
 
 function getMainValue(category, entry) {
@@ -87,10 +87,11 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
             {entry.kontonummer && <InfoRow label="Kontonr." value={entry.kontonummer} />}
           </div>
 
-          {/* ETF/Sparplan price chart */}
           {category === "sparplaene" && shouldShowChart(entry) && (
             <ETFChart
               ticker={entry.ticker}
+              isin={entry.isin}
+              entryName={entry.name}
               anteile={entry.anteile}
               sparrate={entry.beitrag}
             />
