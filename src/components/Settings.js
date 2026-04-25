@@ -111,6 +111,23 @@ export default function Settings() {
           <div>📄 <code>{previewPath}/data.json</code></div>
           <div>📁 <code>{previewPath}/Dokumente/&lt;kategorie&gt;/</code></div>
         </div>
+
+        {/* Cross-device sync info */}
+        <div style={{
+          background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.2)",
+          borderRadius: "var(--radius-sm)", padding: "12px 14px",
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", marginBottom: 6 }}>📱 Geräteübergreifende Synchronisierung</div>
+          <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7 }}>
+            Alle Daten werden in deiner OneDrive gespeichert. Auf jedem Gerät (Smartphone, Tablet, PC)
+            mit demselben Microsoft-Konto und demselben Pfad sind deine Finanzdaten automatisch verfügbar —
+            ohne manuelle Übertragung.
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6 }}>
+            Tipp: Installiere die App auf allen Geräten und trage denselben Pfad ein.
+          </div>
+        </div>
+
         <button className="btn-primary" onClick={handleSavePath} style={{ alignSelf: "flex-start", minWidth: 180 }}>
           {savedPath ? "✓ Gespeichert" : "Pfad speichern"}
         </button>
@@ -121,7 +138,8 @@ export default function Settings() {
         <div>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>🤖 Claude API-Key (KI-Erkennung)</div>
           <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6 }}>
-            Benötigt für automatische Dokumentenerkennung. Key unter <code style={{ fontSize: 11, background: "var(--bg3)", padding: "1px 5px", borderRadius: 4 }}>console.anthropic.com</code> erstellen.
+            Benötigt für automatische Dokumentenerkennung. Key unter{" "}
+            <code style={{ fontSize: 11, background: "var(--bg3)", padding: "1px 5px", borderRadius: 4 }}>console.anthropic.com</code> erstellen.
           </div>
         </div>
         <div>
@@ -130,7 +148,7 @@ export default function Settings() {
             placeholder="sk-ant-..." autoComplete="off" />
         </div>
         <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6 }}>
-          ⚠️ Wird nur lokal in diesem Browser gespeichert (localStorage).
+          ⚠️ Wird nur lokal in diesem Browser gespeichert (localStorage). Nicht auf anderen Geräten verfügbar — dort bitte erneut eingeben.
         </div>
         <button className="btn-primary" onClick={handleSaveKey} style={{ alignSelf: "flex-start", minWidth: 180 }}>
           {savedKey ? "✓ Gespeichert" : "Key speichern"}
