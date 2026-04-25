@@ -58,36 +58,43 @@ const TYPEN = {
 
 const INTERVALL = "monatlich|quartalsweise|halbjaehrlich|jaehrlich|einmalig";
 
-const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument. Antworte NUR mit JSON, keine Erklaerung.
+const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument und extrahiere alle erkennbaren Informationen. Antworte NUR mit JSON.
+Der Nutzer kann die Felder danach korrigieren – trage daher alle erkennbaren Werte ein, auch wenn du nicht 100% sicher bist.
 
-Kategorie: versicherungen|sparplaene|leasing|bankkonten
-Felder:
-- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer,rueckkaufswert,monatsrenteJetzt,renteMit67Niedrig,renteMit67Hoch,renteGarantiert
-- sparplaene: name,anbieter,typ,beitrag,intervall,depot,isin,startdatum,depotwert
-- leasing: name,anbieter,typ,rate,intervall,laufzeit,restwert,faelligkeit
-- bankkonten: name,bank,typ,iban,kontonummer,kontostand
+Pflichtfeld: category (versicherungen|sparplaene|leasing|bankkonten)
 
-typ versicherungen: ${TYPEN.versicherungen}
-typ sparplaene: ${TYPEN.sparplaene}
-typ leasing: ${TYPEN.leasing}
-typ bankkonten: ${TYPEN.bankkonten}
-intervall: ${INTERVALL}
+Felder je Kategorie:
+- versicherungen: name, anbieter, typ, beitrag, intervall, faelligkeit, polizzennummer, rueckkaufswert, monatsrenteJetzt, renteMit67Niedrig, renteMit67Hoch, renteGarantiert
+- sparplaene: name, anbieter, typ, beitrag, intervall, depot, isin, startdatum, depotwert
+- leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
+- bankkonten: name, bank, typ, iban, kontonummer, kontostand
 
-Rentenfelder (nur bei Rentenversicherung/Lebensversicherung):
-- renteMit67Niedrig: schlechteste Prognose Monatsrente ab 67 (z.B. 2% Szenario aus Standmitteilung)
-- renteMit67Hoch: beste Prognose Monatsrente ab 67 (z.B. 6% Szenario aus Standmitteilung)
-- renteGarantiert: garantierte Monatsrente aus konkretem Rentenbescheid (NICHT aus Standmitteilung)
+Erlaubte Werte:
+- typ versicherungen: ${TYPEN.versicherungen}
+- typ sparplaene: ${TYPEN.sparplaene}
+- typ leasing: ${TYPEN.leasing}
+- typ bankkonten: ${TYPEN.bankkonten}
+- intervall: ${INTERVALL}
 
-Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie angegeben, nur sichere Felder.
-Beispiel: {"category":"versicherungen","name":"Allianz RV","typ":"Rentenversicherung","renteMit67Niedrig":"320.00","renteMit67Hoch":"580.00"}`;
+Hinweise:
+- name: Bezeichnung des Vertrags/Produkts (z.B. "Allianz RiesterRente", "DEVK Haftpflicht")
+- anbieter/bank: Name des Versicherers oder der Bank (oft im Briefkopf oder Logo)
+- beitrag/rate: regelmäßige Zahlung (ohne €-Zeichen, z.B. 45.90)
+- polizzennummer: Vertragsnummer, Policennummer, Versicherungsscheinnummer
+- renteMit67Niedrig/Hoch: Prognose-Spanne aus Standmitteilung (2%/6%-Szenario)
+- renteGarantiert: nur bei konkretem Rentenbescheid, nicht bei Prognosen
+- Daten im Format YYYY-MM-DD
+- typ und intervall exakt wie oben angegeben
+
+Gib so viele Felder wie möglich an. NUR JSON, keine Erklärung.`;
 
 const FIELDS_PROMPT = (category, fieldList) => {
-  let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}\n`;
+  let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) alle erkennbaren Felder als JSON: ${fieldList}\n`;
   p += `typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten\nintervall: ${INTERVALL}\n`;
   if (category === "versicherungen") {
     p += `renteMit67Niedrig: pessimistisches Szenario (2%), renteMit67Hoch: optimistisches Szenario (6%), renteGarantiert: nur aus Rentenbescheid\n`;
   }
-  p += `Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, nur sichere Felder, NUR JSON.`;
+  p += `Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD.\nFülle alle erkennbaren Felder aus – der Nutzer kann sie korrigieren. NUR JSON.`;
   return p;
 };
 
@@ -112,7 +119,7 @@ WICHTIG:
 - Achte gezielt auf handschriftliche Ergänzungen, Notizen oder Stempel auf dem Beleg oder der Rückseite.
 - Erkenne sowohl gedruckten als auch handgeschriebenen Text.
 - Bei Restaurantbelegen: Prüfe ob 7% (Speisen) und 19% (Getränke) separat ausgewiesen sind.
-- Nur sichere Felder befüllen, NUR JSON zurückgeben.`;
+- Fülle alle erkennbaren Felder aus, NUR JSON zurückgeben.`;
 
 export function buildDocumentName(typ, anbieter) {
   const date = new Date().toISOString().slice(0, 10);
@@ -139,7 +146,7 @@ export async function detectDocumentType(file) {
 
 export async function mapTextToFields(text, category, fields) {
   const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(",");
-  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 2500)}`);
+  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 2500)}`, 1024);
 }
 
 export async function mapPDFToFields(file, category, fields) {
@@ -149,11 +156,11 @@ export async function mapPDFToFields(file, category, fields) {
   return callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
     { type: "text", text: FIELDS_PROMPT(category, fieldList) },
-  ]);
+  ], 1024);
 }
 
 export async function detectAndExtractFromText(text) {
-  const result = await callClaude(`${DETECT_PROMPT}\n\nText:\n${text.slice(0, 2500)}`);
+  const result = await callClaude(`${DETECT_PROMPT}\n\nText:\n${text.slice(0, 2500)}`, 1024);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
 }
@@ -164,7 +171,7 @@ export async function detectAndExtractFromPDF(file) {
   const result = await callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
     { type: "text", text: DETECT_PROMPT },
-  ]);
+  ], 1024);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
 }
