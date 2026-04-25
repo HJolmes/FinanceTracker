@@ -3,7 +3,8 @@ import React, { useState } from "react";
 const CATEGORY_CONFIG = {
   versicherungen: {
     label: "Versicherungen", icon: "🛡️",
-    fields: ["name","anbieter","typ","beitrag","intervall","faelligkeit","polizzennummer","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","notiz"],
+    fields: ["name","anbieter","typ","beitrag","intervall","faelligkeit","polizzennummer",
+             "rueckkaufswert","monatsrenteJetzt","renteMit67Niedrig","renteMit67Hoch","renteGarantiert","notiz"],
     typen: ["Krankenversicherung","Haftpflicht","Kfz","Berufsunfähigkeit","Risikoleben","Hausrat","Gebäude","Rechtsschutz","Unfallversicherung","Reiseversicherung","Lebensversicherung","Rentenversicherung","Sonstige"],
   },
   sparplaene: {
@@ -29,6 +30,7 @@ function getMainValue(category, entry) {
   return null;
 }
 
+// Returns reminder info only when the last upload is older than 7 days
 function getUpdateReminder(dokumente) {
   if (!dokumente || dokumente.length === 0) return null;
   const datesMs = dokumente
@@ -37,12 +39,19 @@ function getUpdateReminder(dokumente) {
     .sort((a, b) => b - a);
   if (datesMs.length === 0) return null;
   const lastMs = datesMs[0];
+  const now = Date.now();
+  // Grace period: newly uploaded docs don’t trigger a reminder
+  if ((now - lastMs) < 7 * 24 * 60 * 60 * 1000) return null;
   const intervalMs = datesMs.length >= 2
     ? (datesMs[0] - datesMs[datesMs.length - 1]) / (datesMs.length - 1)
     : 365 * 24 * 60 * 60 * 1000;
   const nextMs = lastMs + intervalMs;
-  const daysUntil = Math.round((nextMs - Date.now()) / (24 * 60 * 60 * 1000));
+  const daysUntil = Math.round((nextMs - now) / (24 * 60 * 60 * 1000));
   return { nextDate: new Date(nextMs).toISOString().slice(0, 10), daysUntil };
+}
+
+function fmt(val) {
+  return parseFloat(val).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
 
 function InfoRow({ label, value }) {
@@ -59,7 +68,21 @@ function BestandRow({ label, value, highlight }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
       <div style={{ fontSize: 12, color: "var(--text3)" }}>{label}</div>
       <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: highlight ? "var(--green)" : "var(--accent)" }}>
-        {parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+        {fmt(value)}
+      </div>
+    </div>
+  );
+}
+
+function RentenSpanneRow({ niedrig, hoch }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 12, color: "var(--text3)" }}>Rente mit 67 (Spanne)</div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 15 }}>
+        <span style={{ color: "var(--text2)" }}>{fmt(niedrig)}</span>
+        <span style={{ color: "var(--text3)", fontSize: 12, margin: "0 4px" }}>–</span>
+        <span style={{ color: "var(--green)" }}>{fmt(hoch)}</span>
+        <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 3 }}>/Mo.</span>
       </div>
     </div>
   );
@@ -69,11 +92,17 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const value = getMainValue(category, entry);
-  const hasBestand = entry.rueckkaufswert || entry.monatsrenteJetzt || entry.monatsrenteMit67 || entry.depotwert || entry.kontostand;
+  const hasBestand = entry.rueckkaufswert || entry.monatsrenteJetzt ||
+    entry.renteMit67Niedrig || entry.renteMit67Hoch || entry.renteGarantiert ||
+    entry.monatsrenteMit67 || entry.depotwert || entry.kontostand;
   const dokumente = entry.dokumente || (entry.dokument ? [{ url: entry.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] : []);
   const reminder = getUpdateReminder(dokumente);
   const showReminder = reminder && reminder.daysUntil <= 30;
   const isOverdue = reminder && reminder.daysUntil <= 0;
+
+  const hasRange = entry.renteMit67Niedrig && entry.renteMit67Hoch;
+  const hasGuaranteed = entry.renteGarantiert;
+  const hasFallbackRente = entry.monatsrenteMit67 && !hasRange && !hasGuaranteed;
 
   return (
     <div className="card fade-in" style={{ padding: 16, marginBottom: 12 }}>
@@ -89,14 +118,14 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
           {value && (
             <>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--accent)" }}>
-                {parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+                {fmt(value)}
               </div>
               <div style={{ fontSize: 11, color: "var(--text3)" }}>{entry.intervall || "monatl."}</div>
             </>
           )}
           {entry.kontostand && !value && (
             <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--green)" }}>
-              {parseFloat(entry.kontostand).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+              {fmt(entry.kontostand)}
             </div>
           )}
         </div>
@@ -136,8 +165,22 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
               {entry.rueckkaufswert && <BestandRow label="Rückkaufswert (aktuell)" value={entry.rueckkaufswert} />}
               {entry.depotwert && <BestandRow label="Depotwert (aktuell)" value={entry.depotwert} highlight />}
               {entry.kontostand && <BestandRow label="Kontostand (aktuell)" value={entry.kontostand} highlight />}
-              {entry.monatsrenteJetzt && <BestandRow label="Monatliche Rente (jetzt)" value={entry.monatsrenteJetzt} />}
-              {entry.monatsrenteMit67 && <BestandRow label="Monatliche Rente (mit 67)" value={entry.monatsrenteMit67} highlight />}
+              {entry.monatsrenteJetzt && <BestandRow label="Monatliche Rente (aktuell)" value={entry.monatsrenteJetzt} />}
+
+              {/* Rentenvorschau mit 67 */}
+              {hasGuaranteed && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: "var(--text3)" }}>Garantierte Rente mit 67</div>
+                    <div style={{ fontSize: 10, color: "var(--text3)" }}>aus Rentenbescheid</div>
+                  </div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--green)" }}>
+                    {fmt(entry.renteGarantiert)}<span style={{ fontSize: 10, marginLeft: 3, color: "var(--text3)" }}>/Mo.</span>
+                  </div>
+                </div>
+              )}
+              {hasRange && <RentenSpanneRow niedrig={entry.renteMit67Niedrig} hoch={entry.renteMit67Hoch} />}
+              {hasFallbackRente && <BestandRow label="Monatliche Rente (mit 67)" value={entry.monatsrenteMit67} highlight />}
             </div>
           )}
 
