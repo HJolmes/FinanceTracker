@@ -30,6 +30,29 @@ function useIsDesktop() {
   return d;
 }
 
+function UpdateBanner() {
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 300,
+      background: "var(--accent)", color: "#fff",
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "12px 20px", fontSize: 13, boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+    }}>
+      <span>🔄 Neue Version verfügbar</span>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          background: "rgba(255,255,255,0.25)", border: "none",
+          borderRadius: 8, padding: "6px 16px", color: "#fff",
+          cursor: "pointer", fontWeight: 700, fontSize: 13,
+        }}
+      >
+        Jetzt aktualisieren
+      </button>
+    </div>
+  );
+}
+
 function AppInner() {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
@@ -43,6 +66,13 @@ function AppInner() {
   const [smartEntry, setSmartEntry] = useState(null);
   const [nordigenNotice, setNordigenNotice] = useState("");
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setUpdateReady(true);
+    window.addEventListener("sw-updated", handler);
+    return () => window.removeEventListener("sw-updated", handler);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -116,7 +146,6 @@ function AppInner() {
     await handleSave(newData);
   };
 
-  // Einzelnes Dokument aus einem Eintrag entfernen
   const handleDeleteDocument = async (category, entryId, docIndex) => {
     const entry = (data[category] || []).find((e) => e.id === entryId);
     if (!entry) return;
@@ -224,11 +253,12 @@ function AppInner() {
   if (isDesktop) {
     return (
       <div style={{ display: "flex", height: "100%" }}>
+        {updateReady && <UpdateBanner />}
         <NavBar active={isSettings ? null : activeTab} onChange={handleNavChange} mode="sidebar"
           syncing={syncing} onSettings={() => handleNavChange("settings")} onLogout={() => instance.logout()} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {notice}
-          <div className="scroll" style={{ flex: 1, padding: "24px 40px" }}>
+          <div className="scroll" style={{ flex: 1, padding: "24px 40px", paddingTop: updateReady ? 72 : 24 }}>
             <div style={{ maxWidth: 900, margin: "0 auto" }}>{mainContent}</div>
           </div>
         </div>
@@ -239,7 +269,8 @@ function AppInner() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ padding: "16px 20px 8px", borderBottom: "1px solid var(--border)", background: "var(--bg)", flexShrink: 0 }}>
+      {updateReady && <UpdateBanner />}
+      <div style={{ padding: "16px 20px 8px", borderBottom: "1px solid var(--border)", background: "var(--bg)", flexShrink: 0, marginTop: updateReady ? 48 : 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--text)", letterSpacing: "-0.02em" }}>
