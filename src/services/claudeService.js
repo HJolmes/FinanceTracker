@@ -21,7 +21,7 @@ function toBase64(file) {
 
 const isPdf = (file) => file.type === "application/pdf";
 
-async function callClaude(content) {
+async function callClaude(content, maxTokens = 512) {
   const apiKey = getClaudeApiKey();
   if (!apiKey) throw new Error("NO_KEY");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -34,7 +34,7 @@ async function callClaude(content) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 512,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content }],
     }),
   });
@@ -82,11 +82,8 @@ Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie 
 Beispiel: {"category":"versicherungen","name":"Allianz RV","typ":"Rentenversicherung","renteMit67Niedrig":"320.00","renteMit67Hoch":"580.00"}`;
 
 const FIELDS_PROMPT = (category, fieldList) => {
-  let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}
-`;
-  p += `typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten
-intervall: ${INTERVALL}
-`;
+  let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}\n`;
+  p += `typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten\nintervall: ${INTERVALL}\n`;
   if (category === "versicherungen") {
     p += `renteMit67Niedrig: pessimistisches Szenario (2%), renteMit67Hoch: optimistisches Szenario (6%), renteGarantiert: nur aus Rentenbescheid\n`;
   }
@@ -97,9 +94,25 @@ intervall: ${INTERVALL}
 const DOC_TYPE_PROMPT = `Dokumenttyp als JSON: {"typ":"..."}
 Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Rentenbescheid|Sonstiges`;
 
-const RECEIPT_PROMPT = `Analysiere diesen Beleg/Kassenbon. Antworte NUR mit JSON.
-Felder: datum (YYYY-MM-DD), betrag (Zahl ohne €), mwst (MwSt-Satz als Zahl z.B. 19), partner (Firma/Lieferant), beschreibung (kurze Beschreibung), kategorie (Bewirtung|Fahrtkosten|Arbeitsmittel|Fortbildung|Bürobedarf|Sonstiges), zweck (geschäftlicher Zweck).
-Nur sichere Felder, NUR JSON.`;
+const RECEIPT_PROMPT = `Analysiere diesen deutschen Beleg/Kassenbon. Antworte NUR mit JSON.
+
+Felder:
+- datum: Belegdatum (YYYY-MM-DD)
+- betrag: Gesamtbetrag inkl. MwSt (Zahl ohne €)
+- mwst: dominanter MwSt-Satz (Zahl, z.B. 19 oder 7) – nur wenn eindeutig ein einzelner Satz
+- netto7: Nettobetrag der Positionen zu 7% MwSt (Speisen/Lebensmittel), falls auf dem Beleg ausgewiesen
+- netto19: Nettobetrag der Positionen zu 19% MwSt (Getränke/Alkohol/Sonstiges), falls auf dem Beleg ausgewiesen
+- partner: Name des Restaurants / Unternehmens / Lieferanten (gedruckt)
+- beschreibung: kurze Beschreibung der Leistung (z.B. "Geschäftsessen", "Taxi", "Fachliteratur")
+- kategorie: Bewirtung|Fahrtkosten|Arbeitsmittel|Fortbildung|Bürobedarf|Sonstiges
+- teilnehmer: handschriftlich auf dem Beleg ergänzte Teilnehmernamen (kommagetrennt) – AUCH HANDSCHRIFT LESEN!
+- zweck: handschriftlich ergänzter geschäftlicher Anlass/Zweck – AUCH HANDSCHRIFT LESEN!
+
+WICHTIG:
+- Achte gezielt auf handschriftliche Ergänzungen, Notizen oder Stempel auf dem Beleg oder der Rückseite.
+- Erkenne sowohl gedruckten als auch handgeschriebenen Text.
+- Bei Restaurantbelegen: Prüfe ob 7% (Speisen) und 19% (Getränke) separat ausgewiesen sind.
+- Nur sichere Felder befüllen, NUR JSON zurückgeben.`;
 
 export function buildDocumentName(typ, anbieter) {
   const date = new Date().toISOString().slice(0, 10);
@@ -164,7 +177,7 @@ export async function extractReceiptFields(file) {
     const content = isPdf(file)
       ? [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: RECEIPT_PROMPT }]
       : [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: RECEIPT_PROMPT }];
-    return await callClaude(content);
+    return await callClaude(content, 768);
   } catch {
     return {};
   }
