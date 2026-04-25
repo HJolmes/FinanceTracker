@@ -29,6 +29,22 @@ function getMainValue(category, entry) {
   return null;
 }
 
+function getUpdateReminder(dokumente) {
+  if (!dokumente || dokumente.length === 0) return null;
+  const datesMs = dokumente
+    .map((d) => d.datum ? new Date(d.datum).getTime() : NaN)
+    .filter((t) => !isNaN(t))
+    .sort((a, b) => b - a);
+  if (datesMs.length === 0) return null;
+  const lastMs = datesMs[0];
+  const intervalMs = datesMs.length >= 2
+    ? (datesMs[0] - datesMs[datesMs.length - 1]) / (datesMs.length - 1)
+    : 365 * 24 * 60 * 60 * 1000;
+  const nextMs = lastMs + intervalMs;
+  const daysUntil = Math.round((nextMs - Date.now()) / (24 * 60 * 60 * 1000));
+  return { nextDate: new Date(nextMs).toISOString().slice(0, 10), daysUntil };
+}
+
 function InfoRow({ label, value }) {
   return (
     <div>
@@ -55,6 +71,9 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
   const value = getMainValue(category, entry);
   const hasBestand = entry.rueckkaufswert || entry.monatsrenteJetzt || entry.monatsrenteMit67 || entry.depotwert || entry.kontostand;
   const dokumente = entry.dokumente || (entry.dokument ? [{ url: entry.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] : []);
+  const reminder = getUpdateReminder(dokumente);
+  const showReminder = reminder && reminder.daysUntil <= 30;
+  const isOverdue = reminder && reminder.daysUntil <= 0;
 
   return (
     <div className="card fade-in" style={{ padding: 16, marginBottom: 12 }}>
@@ -83,6 +102,20 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
         </div>
       </div>
 
+      {showReminder && (
+        <div style={{
+          marginTop: 8, padding: "5px 10px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 600,
+          background: isOverdue ? "rgba(240,96,96,0.12)" : "rgba(232,168,56,0.10)",
+          color: isOverdue ? "var(--red)" : "var(--accent)",
+          border: `1px solid ${isOverdue ? "rgba(240,96,96,0.25)" : "rgba(232,168,56,0.25)"}`,
+        }}>
+          {isOverdue
+            ? `⚠️ Dokument-Update überfällig (erwartet ${reminder.nextDate})`
+            : `📅 Nächstes Dokument in ${reminder.daysUntil} Tagen erwartet (${reminder.nextDate})`
+          }
+        </div>
+      )}
+
       {expanded && (
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
@@ -108,7 +141,6 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
             </div>
           )}
 
-          {/* Dokumentenliste */}
           {dokumente.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Dokumente ({dokumente.length})</div>
