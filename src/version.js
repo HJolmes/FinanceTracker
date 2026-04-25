@@ -1,6 +1,26 @@
-export const APP_VERSION = "beta v0.010";
+export const APP_VERSION = "beta v0.011";
 
 export const APP_CHANGELOG = {
+  "beta v0.011": {
+    date: "25.04.2026",
+    entries: [
+      {
+        emoji: "📈",
+        title: "Echte Kursverläufe für ETF & Spar Pläne",
+        desc: "ETF- und Fonds-Einträge zeigen jetzt den realen Kursverlauf direkt in der Karte – 1M, 3M, 6M, 1J oder 5J wählbar.",
+      },
+      {
+        emoji: "💰",
+        title: "Depotwert live berechnet",
+        desc: "Trägst du deine Anteilszahl ein, berechnet die App den aktuellen Depotwert automatisch aus dem Yahoo Finance Kurs.",
+      },
+      {
+        emoji: "🏷️",
+        title: "Ticker-Feld für Spar Pläne",
+        desc: "Neues Feld 'Börsen-Ticker' und 'Anteile im Besitz' in Spar Plänen – unterstützt ETFs, Fonds und Aktienpläne.",
+      },
+    ],
+  },
   "beta v0.010": {
     date: "25.04.2026",
     entries: [
@@ -12,7 +32,7 @@ export const APP_CHANGELOG = {
       {
         emoji: "🔄",
         title: "Neu bewerten pro Dokument",
-        desc: "Neben jedem Dokument im Bearbeitungsformular gibt es jetzt einen ‚Neu bewerten‘-Button: Datei auswählen und die KI liest alle Felder neu aus.",
+        desc: "Neben jedem Dokument im Bearbeitungsformular gibt es jetzt einen ‘Neu bewerten’-Button: Datei auswählen und die KI liest alle Felder neu aus.",
       },
       {
         emoji: "🧧",
@@ -47,7 +67,7 @@ export const APP_CHANGELOG = {
       {
         emoji: "🔍",
         title: "Update-Reminder verbessert",
-        desc: "Frisch hochgeladene Dokumente lösen in den ersten 7 Tagen keine Übcrfällig-Warnung mehr aus.",
+        desc: "Frisch hochgeladene Dokumente lösen in den ersten 7 Tagen keine Überfällig-Warnung mehr aus.",
       },
       {
         emoji: "🔔",
@@ -60,7 +80,7 @@ export const APP_CHANGELOG = {
     date: "25.04.2026",
     entries: [
       { emoji: "📱", title: "PWA – Als App installierbar", desc: "FinanceTracker kann auf Android als Vollbild-App installiert werden." },
-      { emoji: "🖥️", title: "Desktop-Layout mit Sidebar", desc: "Ab 768 px wechselt die App auf Sidebar-Navigation." },
+      { emoji: "🖥️", title: "Desktop-Layout mit Sidebar", desc: "Ab 768 px wechselt die App auf Sidebar-Navigation." },
       { emoji: "🧧", title: "Steuerbelege-Tab", desc: "KI-Erkennung per Foto/PDF, Jahresübersicht und Kategorien." },
       { emoji: "📅", title: "Dokument-Update-Reminder", desc: "Versicherungen zeigen Hinweis wenn neues Dokument fällig ist." },
     ],
