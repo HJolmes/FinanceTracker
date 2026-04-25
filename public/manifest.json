@@ -1,6 +1,7 @@
 {
   "short_name": "FinanceTracker",
   "name": "FinanceTracker – Meine Finanzen",
+  "description": "Persönlicher Finanz- und Versicherungsmanager",
   "icons": [
     {
       "src": "icon-192.png",
@@ -15,9 +16,11 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/FinanceTracker/",
+  "scope": "/FinanceTracker/",
   "display": "standalone",
   "theme_color": "#0f1923",
   "background_color": "#0f1923",
-  "orientation": "portrait-primary"
+  "orientation": "any",
+  "categories": ["finance", "productivity"]
 }
