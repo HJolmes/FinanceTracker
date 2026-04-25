@@ -40,10 +40,17 @@ export async function saveData(instance, accounts, data) {
   }
 }
 
-export async function uploadDocument(instance, accounts, file, category, entryId) {
+// options: { customName, subfolder }
+export async function uploadDocument(instance, accounts, file, category, entryId, options = {}) {
   const token = await getAccessToken(instance, accounts);
-  const fileName = `${entryId}_${file.name}`;
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${getFolderPath()}/Dokumente/${category}/${fileName}:/content`;
+  const { customName, subfolder } = options;
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "pdf";
+  const fileName = customName
+    ? (customName.endsWith(`.${ext}`) ? customName : `${customName}.${ext}`)
+    : `${entryId}_${file.name}`;
+  const subPath = subfolder ? `/${subfolder}` : "";
+  const path = `/${getFolderPath()}/Dokumente/${category}${subPath}/${fileName}`;
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${path}:/content`;
   const response = await fetch(url, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" },
