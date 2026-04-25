@@ -19,6 +19,8 @@ function toBase64(file) {
   });
 }
 
+const isPdf = (file) => file.type === "application/pdf";
+
 async function callClaude(content) {
   const apiKey = getClaudeApiKey();
   if (!apiKey) throw new Error("NO_KEY");
@@ -81,7 +83,7 @@ Felder pro Kategorie (verwende GENAU diese Schluessel):
 - bankkonten: name, bank, typ, iban, kontonummer, kontostand
 
 Feldbeschreibungen fuer Bestandsfelder:
-- rueckkaufswert: aktueller Rueckkaufswert / Rueckkoufswert der Versicherung (z.B. aus Standmitteilung)
+- rueckkaufswert: aktueller Rueckkaufswert der Versicherung (z.B. aus Standmitteilung)
 - monatsrenteJetzt: prognostizierte monatliche Rente bei sofortigem Rentenbeginn
 - monatsrenteMit67: prognostizierte monatliche Rente bei Rentenbeginn mit 67 Jahren
 - depotwert: aktueller Gesamtwert des Depots / Portfolios
@@ -129,15 +131,48 @@ Regeln:
 - typ MUSS exakt einem der erlaubten Werte entsprechen
 - faelligkeit: naechster Zahlungstermin oder Vertragsbeginn`;
 
+const DOC_TYPE_PROMPT = `Bestimme den Typ dieses deutschen Finanz- oder Versicherungsdokuments.
+Antworte NUR mit JSON: {"typ": "..."}
+Erlaubte Typen: Standmitteilung | Beitragsrechnung | Versicherungsschein | Nachtrag | Mahnung | Kuendigung | Kontoauszug | Depotauszug | Sonstiges`;
+
+export function buildDocumentName(typ, anbieter) {
+  const date = new Date().toISOString().slice(0, 10);
+  const clean = (s) => (s || "").replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, "_").replace(/_+/g, "_").slice(0, 25).replace(/_$/, "");
+  const t = clean(typ || "Dokument");
+  const a = clean(anbieter);
+  return a ? `${date}_${t}_${a}.pdf` : `${date}_${t}.pdf`;
+}
+
+export async function detectDocumentType(file) {
+  if (!getClaudeApiKey()) return "Sonstiges";
+  try {
+    const base64 = await toBase64(file);
+    const mediaType = file.type || (isPdf(file) ? "application/pdf" : "image/jpeg");
+    const content = isPdf(file)
+      ? [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+          { type: "text", text: DOC_TYPE_PROMPT },
+        ]
+      : [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: DOC_TYPE_PROMPT },
+        ];
+    const result = await callClaude(content);
+    return result.typ || "Sonstiges";
+  } catch {
+    return "Sonstiges";
+  }
+}
+
 export async function mapTextToFields(text, category, fields) {
-  const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
+  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(", ");
   return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 3500)}`);
 }
 
 export async function mapPDFToFields(file, category, fields) {
   if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu gross (max ${MAX_PDF_MB} MB)`);
   const base64 = await toBase64(file);
-  const fieldList = fields.filter((f) => !["dokument", "notiz"].includes(f)).join(", ");
+  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(", ");
   return callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
     { type: "text", text: FIELDS_PROMPT(category, fieldList) },
