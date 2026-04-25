@@ -54,6 +54,7 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const value = getMainValue(category, entry);
   const hasBestand = entry.rueckkaufswert || entry.monatsrenteJetzt || entry.monatsrenteMit67 || entry.depotwert || entry.kontostand;
+  const dokumente = entry.dokumente || (entry.dokument ? [{ url: entry.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] : []);
 
   return (
     <div className="card fade-in" style={{ padding: 16, marginBottom: 12 }}>
@@ -107,16 +108,29 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
             </div>
           )}
 
+          {/* Dokumentenliste */}
+          {dokumente.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Dokumente ({dokumente.length})</div>
+              {dokumente.map((doc, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</div>
+                    <div style={{ fontSize: 10, color: "var(--text3)" }}>
+                      {doc.typ}{doc.datum ? ` · ${doc.datum}` : ""}
+                      {i === 0 && <span style={{ color: "var(--green)", marginLeft: 6, fontWeight: 600 }}>● Aktuell</span>}
+                    </div>
+                  </div>
+                  <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)", flexShrink: 0 }}>Öffnen</a>
+                </div>
+              ))}
+            </div>
+          )}
+
           {entry.notiz && (
             <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "var(--text2)", marginBottom: 16 }}>
               📝 {entry.notiz}
             </div>
-          )}
-          {entry.dokument && (
-            <a href={entry.dokument} target="_blank" rel="noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--blue)", textDecoration: "none", marginBottom: 16 }}>
-              📄 Dokument öffnen
-            </a>
           )}
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn-secondary" style={{ fontSize: 13, padding: "8px 16px" }} onClick={() => onEdit(entry)}>✏️ Bearbeiten</button>
