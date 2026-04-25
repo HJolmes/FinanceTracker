@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { getSettings, saveSettings } from "../services/settingsService";
+import { getSettings, saveSettings, getFolderPath } from "../services/settingsService";
 import { getClaudeApiKey, saveClaudeApiKey } from "../services/claudeService";
 import { APP_VERSION, APP_CHANGELOG } from "../version";
 import BankingConnect from "./BankingConnect";
 
-async function forceUpdate() {
+async function forceAppUpdate() {
   if ("serviceWorker" in navigator) {
     const regs = await navigator.serviceWorker.getRegistrations();
     for (const reg of regs) await reg.unregister();
@@ -16,7 +16,7 @@ async function forceUpdate() {
   window.location.reload(true);
 }
 
-export default function Settings({ onShowWhatsNew }) {
+export default function Settings({ onShowWhatsNew, onReloadData }) {
   const [settings, setSettings] = useState(getSettings());
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
   const [savedPath, setSavedPath] = useState(false);
@@ -24,6 +24,7 @@ export default function Settings({ onShowWhatsNew }) {
   const [savedPersonal, setSavedPersonal] = useState(false);
   const [savedBanking, setSavedBanking] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [reloading, setReloading] = useState(false);
 
   const handleSavePath = () => {
     const path = settings.oneDriveFolderPath.trim();
@@ -53,10 +54,17 @@ export default function Settings({ onShowWhatsNew }) {
 
   const handleForceUpdate = async () => {
     setUpdating(true);
-    await forceUpdate();
+    await forceAppUpdate();
+  };
+
+  const handleReload = async () => {
+    setReloading(true);
+    await onReloadData?.();
+    setReloading(false);
   };
 
   const previewPath = settings.oneDriveFolderPath || "…";
+  const effectivePath = getFolderPath();
   const currentYear = new Date().getFullYear();
   const geburtsjahr = parseInt(settings.geburtsjahr);
   const alter = !isNaN(geburtsjahr) && geburtsjahr > 1900 ? currentYear - geburtsjahr : null;
@@ -70,7 +78,7 @@ export default function Settings({ onShowWhatsNew }) {
         <div style={{ fontSize: 13, color: "var(--text3)" }}>App-Konfiguration</div>
       </div>
 
-      {/* Update-Info */}
+      {/* App-Update */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <div>
@@ -79,28 +87,54 @@ export default function Settings({ onShowWhatsNew }) {
               {APP_VERSION}{changelog ? ` · ${changelog.date}` : ""}
             </div>
           </div>
-          <button
-            className="btn-secondary"
-            style={{ fontSize: 12, padding: "8px 16px", flexShrink: 0, whiteSpace: "nowrap" }}
-            onClick={onShowWhatsNew}
-          >
-            Was ist neu?
-          </button>
+          <button className="btn-secondary" style={{ fontSize: 12, padding: "8px 16px", flexShrink: 0, whiteSpace: "nowrap" }}
+            onClick={onShowWhatsNew}>Was ist neu?</button>
         </div>
-        <button
-          className="btn-primary"
+        <button className="btn-primary"
           style={{ fontSize: 13, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          onClick={handleForceUpdate}
-          disabled={updating}
-        >
-          {updating ? (
-            <>⏳ Wird aktualisiert…</>
-          ) : (
-            <>🔄 App aktualisieren &amp; neu laden</>
-          )}
+          onClick={handleForceUpdate} disabled={updating}>
+          {updating ? <>⏳ Wird aktualisiert…</> : <>🔄 App aktualisieren &amp; neu laden</>}
         </button>
         <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.6 }}>
-          Löscht den lokalen Cache und lädt die neueste Version der App. Deine OneDrive-Daten bleiben erhalten.
+          Löscht den lokalen Cache und lädt die neueste Version. OneDrive-Daten bleiben erhalten.
+        </div>
+      </div>
+
+      {/* OneDrive */}
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>☁️ OneDrive-Speicherpfad</div>
+
+        {/* Active path indicator */}
+        <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "10px 14px", fontSize: 12 }}>
+          <span style={{ color: "var(--text3)" }}>Aktiver Pfad: </span>
+          <code style={{ color: "var(--accent)", fontWeight: 600 }}>{effectivePath}/data.json</code>
+        </div>
+
+        <div>
+          <label>Pfad ändern (relativ zur OneDrive-Wurzel)</label>
+          <input type="text" value={settings.oneDriveFolderPath}
+            onChange={(e) => setSettings((p) => ({ ...p, oneDriveFolderPath: e.target.value.replace(/^\/+|\/+$/g, "") }))}
+            placeholder="z.B. Desktop/Privat/Finanzen" />
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn-primary" onClick={handleSavePath} style={{ flex: 1 }}>
+            {savedPath ? "✓ Gespeichert" : "Pfad speichern"}
+          </button>
+          <button className="btn-secondary" onClick={handleReload} style={{ flex: 1 }} disabled={reloading}>
+            {reloading ? "⏳ Lädt…" : "☁️ Aus OneDrive laden"}
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.6 }}>
+          Nach Pfad-Änderung: Pfad speichern → dann „Aus OneDrive laden“ klicken.
+        </div>
+
+        <div style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.2)", borderRadius: "var(--radius-sm)", padding: "12px 14px" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", marginBottom: 6 }}>📱 Geräteübergreifende Synchronisierung</div>
+          <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7 }}>
+            Alle Daten werden in deiner OneDrive gespeichert. Auf jedem Gerät mit demselben Microsoft-Konto
+            und demselben Pfad sind deine Finanzdaten automatisch verfügbar.
+          </div>
         </div>
       </div>
 
@@ -140,42 +174,10 @@ export default function Settings({ onShowWhatsNew }) {
           <input type="text" value={settings.bankingFunctionUrl || ""}
             onChange={(e) => setSettings((p) => ({ ...p, bankingFunctionUrl: e.target.value }))}
             placeholder="https://deine-app.azurewebsites.net" />
-          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.6 }}>
-            URL deiner Azure Function App (ohne /api/banking).
-          </div>
           <button className="btn-primary" onClick={handleSaveBanking} style={{ alignSelf: "flex-start", minWidth: 180, marginTop: 10 }}>
             {savedBanking ? "✓ Gespeichert" : "URL speichern"}
           </button>
         </div>
-      </div>
-
-      {/* OneDrive */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>☁️ OneDrive-Speicherpfad</div>
-        <div>
-          <label>Pfad (relativ zur OneDrive-Wurzel)</label>
-          <input type="text" value={settings.oneDriveFolderPath}
-            onChange={(e) => setSettings((p) => ({ ...p, oneDriveFolderPath: e.target.value.replace(/^\/+|\/+$/g, "") }))}
-            placeholder="z.B. Desktop/Privat/Finanzen" />
-        </div>
-        <div style={{ background: "var(--bg3)", borderRadius: "var(--radius-sm)", padding: "12px 14px", fontSize: 12, color: "var(--text3)", lineHeight: 1.8 }}>
-          <div style={{ color: "var(--text2)", fontWeight: 600, marginBottom: 4 }}>Speicherorte:</div>
-          <div>📄 <code>{previewPath}/data.json</code></div>
-          <div>📁 <code>{previewPath}/Dokumente/&lt;kategorie&gt;/</code></div>
-        </div>
-        <div style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.2)", borderRadius: "var(--radius-sm)", padding: "12px 14px" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", marginBottom: 6 }}>📱 Geräteübergreifende Synchronisierung</div>
-          <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7 }}>
-            Alle Daten werden in deiner OneDrive gespeichert. Auf jedem Gerät mit demselben Microsoft-Konto
-            und demselben Pfad sind deine Finanzdaten automatisch verfügbar.
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6 }}>
-            Tipp: Installiere die App auf allen Geräten und trage denselben Pfad ein.
-          </div>
-        </div>
-        <button className="btn-primary" onClick={handleSavePath} style={{ alignSelf: "flex-start", minWidth: 180 }}>
-          {savedPath ? "✓ Gespeichert" : "Pfad speichern"}
-        </button>
       </div>
 
       {/* Claude API */}
