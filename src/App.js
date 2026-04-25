@@ -13,6 +13,7 @@ import AddReceipt from "./components/AddReceipt";
 import LoginScreen from "./components/LoginScreen";
 import NavBar from "./components/NavBar";
 import Settings from "./components/Settings";
+import WhatsNew from "./components/WhatsNew";
 import { APP_VERSION } from "./version";
 import "./index.css";
 
@@ -41,10 +42,19 @@ function AppInner() {
   const [syncing, setSyncing] = useState(false);
   const [smartEntry, setSmartEntry] = useState(null);
   const [nordigenNotice, setNordigenNotice] = useState("");
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadData(instance, accounts).then((d) => { setData(d); setLoading(false); });
+      loadData(instance, accounts).then((d) => {
+        setData(d);
+        setLoading(false);
+        const seen = localStorage.getItem("ft_seen_version");
+        if (seen !== APP_VERSION) {
+          setShowWhatsNew(true);
+          localStorage.setItem("ft_seen_version", APP_VERSION);
+        }
+      });
 
       const pendingId = getPendingRequisition();
       if (pendingId) {
@@ -159,7 +169,7 @@ function AppInner() {
 
   const mainContent = (
     <>
-      {isSettings && <Settings />}
+      {isSettings && <Settings onShowWhatsNew={() => setShowWhatsNew(true)} />}
       {!isSettings && activeTab === "dashboard" && (
         <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
       )}
@@ -216,6 +226,7 @@ function AppInner() {
           instance={instance} accounts={accounts}
         />
       )}
+      {showWhatsNew && <WhatsNew onClose={() => setShowWhatsNew(false)} />}
     </>
   );
 
