@@ -130,7 +130,6 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
   };
 
   const dokumente = form.dokumente || [];
-  const latestFile = dokumente[0] || null;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
@@ -169,19 +168,28 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                           </div>
                         </div>
                         <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)", flexShrink: 0 }}>Öffnen</a>
+                        {hasApiKey && (
+                          <label
+                            title="Neu bewerten: Datei auswählen um Felder neu auszulesen"
+                            style={{ fontSize: 13, cursor: "pointer", flexShrink: 0, color: "var(--accent)", lineHeight: 1 }}
+                          >
+                            🔄
+                            <input
+                              type="file" accept=".pdf,image/*" style={{ display: "none" }}
+                              onChange={(e) => e.target.files[0] && handleExtract(e.target.files[0])}
+                            />
+                          </label>
+                        )}
                         <button className="btn-ghost" style={{ fontSize: 11, color: "var(--red)", padding: "2px 6px", flexShrink: 0 }} onClick={() => removeDoc(i)}>✕</button>
                       </div>
                     ))}
                   </div>
                 )}
-                {!isFromSmartUpload && hasApiKey && latestFile && ocrState !== "done" && (
-                  <button className="btn-secondary" onClick={() => handleExtract(dokumente[0]?.file)}
-                    disabled={ocrState === "ocr" || ocrState === "ai"}
-                    style={{ fontSize: 13, width: "100%", marginBottom: 8 }}>
-                    {ocrState === "ocr" && `🔍 OCR läuft… ${ocrProgress}%`}
-                    {ocrState === "ai" && "🤖 KI analysiert…"}
-                    {(ocrState === null || ocrState === "error") && "🤖 Aktuelles Dokument mit KI auslesen"}
-                  </button>
+                {ocrState === "ocr" && (
+                  <div style={{ fontSize: 12, color: "var(--text3)", textAlign: "center", marginBottom: 8 }}>🔍 OCR läuft… {ocrProgress}%</div>
+                )}
+                {ocrState === "ai" && (
+                  <div style={{ fontSize: 12, color: "var(--accent)", textAlign: "center", marginBottom: 8 }}>🤖 KI analysiert…</div>
                 )}
                 {ocrState === "done" && (
                   <div style={{ fontSize: 12, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
