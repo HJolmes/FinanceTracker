@@ -34,7 +34,7 @@ async function callClaude(content) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
+      max_tokens: 512,
       messages: [{ role: "user", content }],
     }),
   });
@@ -49,91 +49,44 @@ async function callClaude(content) {
   return JSON.parse(match[0]);
 }
 
-function getCategoryName(cat) {
-  return {
-    versicherungen: "Versicherungsvertrag",
-    sparplaene: "Sparplan / ETF",
-    leasing: "Leasing- oder Kreditvertrag",
-    bankkonten: "Bankdokument",
-  }[cat] || "Finanzdokument";
-}
-
-// Werte muessen EXAKT den <option>-Werten in EntryList.js entsprechen
+// Kompakte Typ-Listen (exakt wie Dropdown-Werte)
 const TYPEN = {
-  versicherungen: "Krankenversicherung | Haftpflicht | Kfz | Berufsunfähigkeit | Risikoleben | Hausrat | Gebäude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige",
-  sparplaene: "ETF | Fonds | Aktienplan | Festgeld | Tagesgeld | Bausparvertrag | Sonstiges",
-  leasing: "Kfz-Leasing | Immobilienkredit | Ratenkredit | Dispositionskredit | Sonstiges",
-  bankkonten: "Girokonto | Tagesgeld | Festgeld | Depot | Gemeinschaftskonto | Sonstiges",
+  versicherungen: "Krankenversicherung|Haftpflicht|Kfz|Berufsunfähigkeit|Risikoleben|Hausrat|Gebäude|Rechtsschutz|Unfallversicherung|Reiseversicherung|Lebensversicherung|Rentenversicherung|Sonstige",
+  sparplaene: "ETF|Fonds|Aktienplan|Festgeld|Tagesgeld|Bausparvertrag|Sonstiges",
+  leasing: "Kfz-Leasing|Immobilienkredit|Ratenkredit|Dispositionskredit|Sonstiges",
+  bankkonten: "Girokonto|Tagesgeld|Festgeld|Depot|Gemeinschaftskonto|Sonstiges",
 };
 
-const DETECT_PROMPT = `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente.
+const INTERVALL = "monatlich|quartalsweise|halbjaehrlich|jaehrlich|einmalig";
 
-AUFGABE: Bestimme die Kategorie und extrahiere alle erkennbaren Felder.
+// ~250 Tokens statt ~800
+const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument. Antworte NUR mit JSON, keine Erklaerung.
 
-Kategorien:
-- versicherungen: Versicherungspolice, Beitragsrechnung, Standmitteilung einer Versicherung
-- sparplaene: ETF-Sparplan, Fonds, Bausparvertrag, Tagesgeld, Festgeld, Depotauszug
-- leasing: Fahrzeugleasing, Ratenkredit, Darlehensvertrag
-- bankkonten: Girokonto, Kontoauszug, IBAN-Dokument
+Kategorie: versicherungen|sparplaene|leasing|bankkonten
+Felder:
+- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer,rueckkaufswert,monatsrenteJetzt,monatsrenteMit67
+- sparplaene: name,anbieter,typ,beitrag,intervall,depot,isin,startdatum,depotwert
+- leasing: name,anbieter,typ,rate,intervall,laufzeit,restwert,faelligkeit
+- bankkonten: name,bank,typ,iban,kontonummer,kontostand
 
-Felder pro Kategorie (verwende GENAU diese Schluessel):
-- versicherungen: name, anbieter, typ, beitrag, intervall, faelligkeit, polizzennummer, rueckkaufswert, monatsrenteJetzt, monatsrenteMit67
-- sparplaene: name, anbieter, typ, beitrag, intervall, depot, isin, startdatum, depotwert
-- leasing: name, anbieter, typ, rate, intervall, laufzeit, restwert, faelligkeit
-- bankkonten: name, bank, typ, iban, kontonummer, kontostand
+typ versicherungen: ${TYPEN.versicherungen}
+typ sparplaene: ${TYPEN.sparplaene}
+typ leasing: ${TYPEN.leasing}
+typ bankkonten: ${TYPEN.bankkonten}
+intervall: ${INTERVALL}
 
-Feldbeschreibungen fuer Bestandsfelder:
-- rueckkaufswert: aktueller Rueckkaufswert der Versicherung (z.B. aus Standmitteilung)
-- monatsrenteJetzt: prognostizierte monatliche Rente bei sofortigem Rentenbeginn
-- monatsrenteMit67: prognostizierte monatliche Rente bei Rentenbeginn mit 67 Jahren
-- depotwert: aktueller Gesamtwert des Depots / Portfolios
-- kontostand: aktueller Kontostand / Saldo
+Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie angegeben, nur sichere Felder.
+Beispiel: {"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich"}`;
 
-Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
-- versicherungen: Krankenversicherung | Haftpflicht | Kfz | Berufsunfähigkeit | Risikoleben | Hausrat | Gebäude | Rechtsschutz | Unfallversicherung | Reiseversicherung | Lebensversicherung | Rentenversicherung | Sonstige
-- sparplaene: ETF | Fonds | Aktienplan | Festgeld | Tagesgeld | Bausparvertrag | Sonstiges
-- leasing: Kfz-Leasing | Immobilienkredit | Ratenkredit | Dispositionskredit | Sonstiges
-- bankkonten: Girokonto | Tagesgeld | Festgeld | Depot | Gemeinschaftskonto | Sonstiges
-
-Regeln:
-- Antworte NUR mit JSON, keine Erklaerung
-- Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
-- Daten: YYYY-MM-DD
-- Nur Felder die eindeutig erkennbar sind
-- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
-- typ MUSS exakt einem der erlaubten Werte entsprechen
-- faelligkeit: naechster Zahlungstermin oder Vertragsbeginn
-
-Beispiel Ausgabe:
-{"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich","polizzennummer":"HV-123456"}`;
-
+// ~150 Tokens statt ~500
 const FIELDS_PROMPT = (category, fieldList) =>
-  `Du bist Experte fuer deutsche Finanz- und Versicherungsdokumente (${getCategoryName(category)}).
+  `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}
+typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten
+intervall: ${INTERVALL}
+Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, nur sichere Felder, NUR JSON.`;
 
-Extrahiere diese Felder: ${fieldList}
-
-Feldbeschreibungen fuer Bestandsfelder:
-- rueckkaufswert: aktueller Rueckkaufswert der Versicherung (z.B. aus Standmitteilung)
-- monatsrenteJetzt: prognostizierte monatliche Rente bei sofortigem Rentenbeginn
-- monatsrenteMit67: prognostizierte monatliche Rente bei Rentenbeginn mit 67 Jahren
-- depotwert: aktueller Gesamtwert des Depots / Portfolios
-- kontostand: aktueller Kontostand / Saldo
-
-Erlaubte Werte fuer "typ" (gib den Wert EXAKT so zurueck, Gross-/Kleinschreibung beachten):
-${TYPEN[category] || "Sonstige"}
-
-Regeln:
-- Antworte NUR mit JSON, keine Erklaerung
-- Zahlen: Dezimalpunkt, kein Waehrungszeichen (z.B. 45.90)
-- Daten: YYYY-MM-DD
-- Nur Felder die eindeutig erkennbar sind
-- intervall muss einer dieser Werte sein: monatlich, quartalsweise, halbjaehrlich, jaehrlich, einmalig
-- typ MUSS exakt einem der erlaubten Werte entsprechen
-- faelligkeit: naechster Zahlungstermin oder Vertragsbeginn`;
-
-const DOC_TYPE_PROMPT = `Bestimme den Typ dieses deutschen Finanz- oder Versicherungsdokuments.
-Antworte NUR mit JSON: {"typ": "..."}
-Erlaubte Typen: Standmitteilung | Beitragsrechnung | Versicherungsschein | Nachtrag | Mahnung | Kuendigung | Kontoauszug | Depotauszug | Sonstiges`;
+const DOC_TYPE_PROMPT = `Dokumenttyp als JSON: {"typ":"..."}
+Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Sonstiges`;
 
 export function buildDocumentName(typ, anbieter) {
   const date = new Date().toISOString().slice(0, 10);
@@ -149,14 +102,8 @@ export async function detectDocumentType(file) {
     const base64 = await toBase64(file);
     const mediaType = file.type || (isPdf(file) ? "application/pdf" : "image/jpeg");
     const content = isPdf(file)
-      ? [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-          { type: "text", text: DOC_TYPE_PROMPT },
-        ]
-      : [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: DOC_TYPE_PROMPT },
-        ];
+      ? [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: DOC_TYPE_PROMPT }]
+      : [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: DOC_TYPE_PROMPT }];
     const result = await callClaude(content);
     return result.typ || "Sonstiges";
   } catch {
@@ -165,14 +112,14 @@ export async function detectDocumentType(file) {
 }
 
 export async function mapTextToFields(text, category, fields) {
-  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(", ");
-  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 3500)}`);
+  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(",");
+  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 2500)}`);
 }
 
 export async function mapPDFToFields(file, category, fields) {
   if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu gross (max ${MAX_PDF_MB} MB)`);
   const base64 = await toBase64(file);
-  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(", ");
+  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(",");
   return callClaude([
     { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
     { type: "text", text: FIELDS_PROMPT(category, fieldList) },
@@ -180,7 +127,7 @@ export async function mapPDFToFields(file, category, fields) {
 }
 
 export async function detectAndExtractFromText(text) {
-  const result = await callClaude(`${DETECT_PROMPT}\n\nText:\n${text.slice(0, 3500)}`);
+  const result = await callClaude(`${DETECT_PROMPT}\n\nText:\n${text.slice(0, 2500)}`);
   if (!result.category) throw new Error("Kategorie nicht erkannt");
   return result;
 }
