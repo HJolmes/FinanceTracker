@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { fetchChartData, calcPerformance } from "../services/marketDataService";
+import { fetchChartData, calcPerformance, lookupTicker } from "../services/marketDataService";
 
 const RANGES = [
   { label: "1M", value: "1mo" },
@@ -32,12 +32,31 @@ const CustomTooltip = ({ active, payload, currency }) => {
   );
 };
 
-export default function ETFChart({ ticker, anteile, sparrate }) {
+export default function ETFChart({ ticker: tickerProp, isin, entryName, anteile, sparrate }) {
+  const [ticker, setTicker] = useState(tickerProp || "");
   const [range, setRange] = useState("1y");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
   const [error, setError] = useState("");
 
+  // Resolve ticker from prop, or auto-lookup from ISIN / name
+  useEffect(() => {
+    if (tickerProp) { setTicker(tickerProp); return; }
+    const query = isin || entryName;
+    if (!query) return;
+    setLookingUp(true);
+    setError("");
+    lookupTicker(query)
+      .then((found) => {
+        setLookingUp(false);
+        if (found) setTicker(found);
+        else setError("Kein Ticker gefunden – bitte manuell im Eintrag hinterlegen");
+      })
+      .catch(() => setLookingUp(false));
+  }, [tickerProp, isin, entryName]);
+
+  // Fetch chart data once ticker is known
   useEffect(() => {
     if (!ticker) return;
     setLoading(true);
@@ -48,10 +67,18 @@ export default function ETFChart({ ticker, anteile, sparrate }) {
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [ticker, range]);
 
+  if (lookingUp) {
+    return (
+      <div style={{ height: 80, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text3)", fontSize: 12 }}>
+        🔍 Ticker wird gesucht…
+      </div>
+    );
+  }
+
   if (!ticker) {
     return (
-      <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>
-        Kein Ticker hinterlegt – Ticker im Eintrag ergänzen für Kursverlauf
+      <div style={{ fontSize: 12, color: error ? "var(--red)" : "var(--text3)", padding: "8px 0" }}>
+        {error || "Kein Ticker – ISIN oder Name ergänzen für automatischen Kursverlauf"}
       </div>
     );
   }
@@ -60,17 +87,19 @@ export default function ETFChart({ ticker, anteile, sparrate }) {
   const perfPositive = perf != null && perf >= 0;
   const lineColor = perf == null ? "var(--accent)" : perf >= 0 ? "#22c55e" : "#ef4444";
 
-  const portfolioValue = data?.currentPrice != null && anteile
-    ? parseFloat(anteile) * data.currentPrice
-    : null;
+  const portfolioValue =
+    data?.currentPrice != null && anteile
+      ? parseFloat(anteile) * data.currentPrice
+      : null;
 
-  const minPrice = data ? Math.min(...data.points.map((p) => p.price)) : undefined;
-  const maxPrice = data ? Math.max(...data.points.map((p) => p.price)) : undefined;
-  const pricePad = data && maxPrice !== minPrice ? (maxPrice - minPrice) * 0.05 : 1;
+  const prices = data?.points.map((p) => p.price) || [];
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 1;
+  const pricePad = maxPrice !== minPrice ? (maxPrice - minPrice) * 0.05 : 1;
 
   return (
     <div style={{ marginTop: 16 }}>
-      {/* Header row: name + performance badge */}
+      {/* Header: name + current price + performance */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>
           {data?.name || ticker}
@@ -111,16 +140,13 @@ export default function ETFChart({ ticker, anteile, sparrate }) {
         ))}
       </div>
 
-      {/* Chart area */}
       {loading && (
         <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text3)", fontSize: 12 }}>
           Kursdaten werden geladen…
         </div>
       )}
       {error && (
-        <div style={{ fontSize: 12, color: "var(--red)", padding: "8px 0" }}>
-          ⚠ {error}
-        </div>
+        <div style={{ fontSize: 12, color: "var(--red)", padding: "8px 0" }}>⚠ {error}</div>
       )}
       {!loading && !error && data && (
         <ResponsiveContainer width="100%" height={120}>
@@ -131,15 +157,12 @@ export default function ETFChart({ ticker, anteile, sparrate }) {
             {data.points.length > 0 && (
               <ReferenceLine y={data.points[0].price} stroke="var(--border)" strokeDasharray="3 3" />
             )}
-            <Line
-              type="monotone" dataKey="price" dot={false}
-              stroke={lineColor} strokeWidth={2}
-            />
+            <Line type="monotone" dataKey="price" dot={false} stroke={lineColor} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       )}
 
-      {/* Portfolio value row */}
+      {/* Portfolio value */}
       {portfolioValue != null && (
         <div style={{
           marginTop: 10, display: "flex", justifyContent: "space-between",
