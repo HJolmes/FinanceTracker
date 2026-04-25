@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { MsalProvider, useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./services/authConfig";
-import { loadData, saveData } from "./services/oneDriveService";
+import { loadData, saveData, uploadDocument } from "./services/oneDriveService";
+import { detectDocumentType, buildDocumentName } from "./services/claudeService";
 import { getRequisition, saveConnectedAccount, getPendingRequisition, clearPendingRequisition } from "./services/bankingService";
 import Dashboard from "./components/Dashboard";
 import EntryList from "./components/EntryList";
@@ -31,7 +32,6 @@ function AppInner() {
     if (isAuthenticated) {
       loadData(instance, accounts).then((d) => { setData(d); setLoading(false); });
 
-      // Rückkehr von Bank-Autorisierung prüfen
       const pendingId = getPendingRequisition();
       if (pendingId) {
         clearPendingRequisition();
@@ -96,6 +96,30 @@ function AppInner() {
     await handleSave(newData);
   };
 
+  // Dokument zu bestehender Police hinzufügen (aus SmartUpload)
+  const handleAddDocumentToEntry = async (category, entryId, extractedFields, file) => {
+    const entry = (data[category] || []).find((e) => e.id === entryId);
+    if (!entry) return;
+    try {
+      const typ = await detectDocumentType(file);
+      const anbieter = entry.anbieter || entry.bank || "";
+      const subfolder = entry.polizzennummer || entry.isin || entryId;
+      const name = buildDocumentName(typ, anbieter);
+      const url = await uploadDocument(instance, accounts, file, category, entryId, { customName: name, subfolder });
+      const newDoc = { url, name, typ, datum: new Date().toISOString().slice(0, 10) };
+      const { category: _cat, ...fields } = extractedFields;
+      const updatedEntry = {
+        ...entry,
+        ...fields,
+        dokument: url,
+        dokumente: [newDoc, ...(entry.dokumente || [])],
+      };
+      await handleUpdateEntry(category, entryId, updatedEntry);
+    } catch (e) {
+      console.warn("Dokument-Upload fehlgeschlagen", e);
+    }
+  };
+
   const handleNavChange = (tab) => {
     setActiveTab(tab);
     setShowAdd(false);
@@ -149,7 +173,9 @@ function AppInner() {
 
       <div className="scroll" style={{ flex: 1, padding: "16px 20px" }}>
         {isSettings && <Settings />}
-        {!isSettings && activeTab === "dashboard" && <Dashboard data={data} onSmartUpload={handleSmartUpload} />}
+        {!isSettings && activeTab === "dashboard" && (
+          <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
+        )}
         {!isSettings && activeTab !== "dashboard" && (
           <EntryList
             category={activeTab}
