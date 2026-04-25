@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { MsalProvider, useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "./services/authConfig";
-import { loadData, saveData, uploadDocument } from "./services/oneDriveService";
+import { loadData, saveData, uploadDocument, forceReloadData } from "./services/oneDriveService";
 import { detectDocumentType, buildDocumentName } from "./services/claudeService";
 import { getRequisition, saveConnectedAccount, getPendingRequisition, clearPendingRequisition } from "./services/bankingService";
 import Dashboard from "./components/Dashboard";
@@ -117,6 +117,18 @@ function AppInner() {
     setSyncing(false);
   };
 
+  const handleReloadFromOneDrive = async () => {
+    setLoading(true);
+    try {
+      const { data: newData } = await forceReloadData(instance, accounts);
+      setData(newData);
+    } catch (e) {
+      alert(`❌ OneDrive-Laden fehlgeschlagen:\n${e.message}\n\nBitte Pfad in Einstellungen prüfen.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddEntry = async (category, entry) => {
     const newData = {
       ...data,
@@ -196,7 +208,12 @@ function AppInner() {
 
   const mainContent = (
     <>
-      {isSettings && <Settings onShowWhatsNew={() => setShowWhatsNew(true)} />}
+      {isSettings && (
+        <Settings
+          onShowWhatsNew={() => setShowWhatsNew(true)}
+          onReloadData={handleReloadFromOneDrive}
+        />
+      )}
       {!isSettings && activeTab === "dashboard" && (
         <Dashboard data={data} onSmartUpload={handleSmartUpload} onAddDocument={handleAddDocumentToEntry} />
       )}
