@@ -1,6 +1,26 @@
-export const APP_VERSION = "beta v0.011";
+export const APP_VERSION = "beta v0.012";
 
 export const APP_CHANGELOG = {
+  "beta v0.012": {
+    date: "25.04.2026",
+    entries: [
+      {
+        emoji: "🧠",
+        title: "Ticker automatisch erkannt",
+        desc: "ISIN eingeben genügt – der Börsenticker wird automatisch über Yahoo Finance gesucht. Kein manuelles Eintippen mehr nötig.",
+      },
+      {
+        emoji: "🔍",
+        title: "Kursverlauf ohne Ticker",
+        desc: "ETF-Einträge ohne Ticker zeigen trotzdem den Kursverlauf – die App sucht den Ticker selbständig anhand von ISIN oder Name.",
+      },
+      {
+        emoji: "🔧",
+        title: "\"Failed to fetch\" behoben",
+        desc: "Yahoo Finance API nutzt jetzt query2 als Fallback wenn query1 blockiert wird – Kursdaten laden zuverlässiger auf Mobilgeräten.",
+      },
+    ],
+  },
   "beta v0.011": {
     date: "25.04.2026",
     entries: [
