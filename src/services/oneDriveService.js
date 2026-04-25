@@ -11,13 +11,22 @@ async function getAccessToken(instance, accounts) {
   return response.accessToken;
 }
 
+function dataUrl() {
+  return `https://graph.microsoft.com/v1.0/me/drive/root:/${getFolderPath()}/${DATA_FILE}:/content`;
+}
+
 export async function loadData(instance, accounts) {
   try {
     const token = await getAccessToken(instance, accounts);
-    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${getFolderPath()}/${DATA_FILE}:/content`;
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (response.status === 404) return getDefaultData();
-    return JSON.parse(await response.text());
+    const response = await fetch(dataUrl(), { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      // Not found or error – try localStorage before returning empty
+      const local = localStorage.getItem("financetracker_data");
+      return local ? JSON.parse(local) : getDefaultData();
+    }
+    const data = JSON.parse(await response.text());
+    localStorage.setItem("financetracker_data", JSON.stringify(data));
+    return data;
   } catch (e) {
     console.warn("OneDrive load failed", e);
     const local = localStorage.getItem("financetracker_data");
@@ -25,12 +34,24 @@ export async function loadData(instance, accounts) {
   }
 }
 
+// Force-reload from OneDrive using the currently configured path.
+// Returns { data, path } on success, throws on failure.
+export async function forceReloadData(instance, accounts) {
+  const token = await getAccessToken(instance, accounts);
+  const path = getFolderPath();
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/${DATA_FILE}:/content`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`Datei nicht gefunden (HTTP ${response.status}) in: ${path}`);
+  const data = JSON.parse(await response.text());
+  localStorage.setItem("financetracker_data", JSON.stringify(data));
+  return { data, path };
+}
+
 export async function saveData(instance, accounts, data) {
   localStorage.setItem("financetracker_data", JSON.stringify(data));
   try {
     const token = await getAccessToken(instance, accounts);
-    const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${getFolderPath()}/${DATA_FILE}:/content`;
-    await fetch(url, {
+    await fetch(dataUrl(), {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -40,7 +61,6 @@ export async function saveData(instance, accounts, data) {
   }
 }
 
-// options: { customName, subfolder }
 export async function uploadDocument(instance, accounts, file, category, entryId, options = {}) {
   const token = await getAccessToken(instance, accounts);
   const { customName, subfolder } = options;
