@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { getSettings, saveSettings } from "../services/settingsService";
 import { getClaudeApiKey, saveClaudeApiKey } from "../services/claudeService";
+import { APP_VERSION, APP_CHANGELOG } from "../version";
 import BankingConnect from "./BankingConnect";
 
-export default function Settings() {
+export default function Settings({ onShowWhatsNew }) {
   const [settings, setSettings] = useState(getSettings());
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
   const [savedPath, setSavedPath] = useState(false);
@@ -42,12 +43,30 @@ export default function Settings() {
   const geburtsjahr = parseInt(settings.geburtsjahr);
   const alter = !isNaN(geburtsjahr) && geburtsjahr > 1900 ? currentYear - geburtsjahr : null;
   const jahreZu67 = alter !== null ? Math.max(0, 67 - alter) : null;
+  const changelog = APP_CHANGELOG[APP_VERSION];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 22, marginBottom: 4 }}>Einstellungen</div>
         <div style={{ fontSize: 13, color: "var(--text3)" }}>App-Konfiguration</div>
+      </div>
+
+      {/* Update-Info */}
+      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>🔍 Letzte Aktualisierung</div>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>
+            {APP_VERSION}{changelog ? ` · ${changelog.date}` : ""}
+          </div>
+        </div>
+        <button
+          className="btn-secondary"
+          style={{ fontSize: 12, padding: "8px 16px", flexShrink: 0, whiteSpace: "nowrap" }}
+          onClick={onShowWhatsNew}
+        >
+          Was ist neu?
+        </button>
       </div>
 
       {/* Persönliche Daten */}
@@ -80,16 +99,14 @@ export default function Settings() {
             Verbindet echte Bankkonten über Open Banking (PSD2). Kontostand wird live abgerufen.
           </div>
         </div>
-
         <BankingConnect />
-
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text2)" }}>Azure Function URL</div>
           <input type="text" value={settings.bankingFunctionUrl || ""}
             onChange={(e) => setSettings((p) => ({ ...p, bankingFunctionUrl: e.target.value }))}
             placeholder="https://deine-app.azurewebsites.net" />
           <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.6 }}>
-            URL deiner Azure Function App (ohne /api/banking). Siehe Setup-Anleitung.
+            URL deiner Azure Function App (ohne /api/banking).
           </div>
           <button className="btn-primary" onClick={handleSaveBanking} style={{ alignSelf: "flex-start", minWidth: 180, marginTop: 10 }}>
             {savedBanking ? "✓ Gespeichert" : "URL speichern"}
@@ -111,23 +128,16 @@ export default function Settings() {
           <div>📄 <code>{previewPath}/data.json</code></div>
           <div>📁 <code>{previewPath}/Dokumente/&lt;kategorie&gt;/</code></div>
         </div>
-
-        {/* Cross-device sync info */}
-        <div style={{
-          background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.2)",
-          borderRadius: "var(--radius-sm)", padding: "12px 14px",
-        }}>
+        <div style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.2)", borderRadius: "var(--radius-sm)", padding: "12px 14px" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", marginBottom: 6 }}>📱 Geräteübergreifende Synchronisierung</div>
           <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.7 }}>
-            Alle Daten werden in deiner OneDrive gespeichert. Auf jedem Gerät (Smartphone, Tablet, PC)
-            mit demselben Microsoft-Konto und demselben Pfad sind deine Finanzdaten automatisch verfügbar —
-            ohne manuelle Übertragung.
+            Alle Daten werden in deiner OneDrive gespeichert. Auf jedem Gerät mit demselben Microsoft-Konto
+            und demselben Pfad sind deine Finanzdaten automatisch verfügbar.
           </div>
           <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6 }}>
             Tipp: Installiere die App auf allen Geräten und trage denselben Pfad ein.
           </div>
         </div>
-
         <button className="btn-primary" onClick={handleSavePath} style={{ alignSelf: "flex-start", minWidth: 180 }}>
           {savedPath ? "✓ Gespeichert" : "Pfad speichern"}
         </button>
@@ -148,7 +158,7 @@ export default function Settings() {
             placeholder="sk-ant-..." autoComplete="off" />
         </div>
         <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6 }}>
-          ⚠️ Wird nur lokal in diesem Browser gespeichert (localStorage). Nicht auf anderen Geräten verfügbar — dort bitte erneut eingeben.
+          ⚠️ Wird nur lokal im Browser gespeichert (localStorage). Auf anderen Geräten bitte erneut eingeben.
         </div>
         <button className="btn-primary" onClick={handleSaveKey} style={{ alignSelf: "flex-start", minWidth: 180 }}>
           {savedKey ? "✓ Gespeichert" : "Key speichern"}
