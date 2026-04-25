@@ -21,6 +21,37 @@ function toBase64(file) {
 
 const isPdf = (file) => file.type === "application/pdf";
 
+// Extracts the first syntactically valid JSON object from a string.
+// Uses bracket counting so trailing text or nested braces don't break parsing.
+function extractFirstJSON(text) {
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\" && inString) { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (c === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          return JSON.parse(text.slice(start, i + 1));
+        } catch {
+          // reset and keep looking
+          start = -1;
+        }
+      }
+    }
+  }
+  throw new Error("Keine Felder erkannt");
+}
+
 async function callClaude(content, maxTokens = 512) {
   const apiKey = getClaudeApiKey();
   if (!apiKey) throw new Error("NO_KEY");
@@ -44,9 +75,7 @@ async function callClaude(content, maxTokens = 512) {
   }
   const data = await res.json();
   const text = data.content?.[0]?.text || "";
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Keine Felder erkannt");
-  return JSON.parse(match[0]);
+  return extractFirstJSON(text);
 }
 
 const TYPEN = {
@@ -58,7 +87,7 @@ const TYPEN = {
 
 const INTERVALL = "monatlich|quartalsweise|halbjaehrlich|jaehrlich|einmalig";
 
-const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument und extrahiere alle erkennbaren Informationen. Antworte NUR mit JSON.
+const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument und extrahiere alle erkennbaren Informationen. Antworte NUR mit JSON, keine Erklärung.
 Der Nutzer kann die Felder danach korrigieren – trage daher alle erkennbaren Werte ein, auch wenn du nicht 100% sicher bist.
 
 Pflichtfeld: category (versicherungen|sparplaene|leasing|bankkonten)
@@ -77,16 +106,16 @@ Erlaubte Werte:
 - intervall: ${INTERVALL}
 
 Hinweise:
-- name: Bezeichnung des Vertrags/Produkts (z.B. "Allianz RiesterRente", "DEVK Haftpflicht")
-- anbieter/bank: Name des Versicherers oder der Bank (oft im Briefkopf oder Logo)
-- beitrag/rate: regelmäßige Zahlung (ohne €-Zeichen, z.B. 45.90)
-- polizzennummer: Vertragsnummer, Policennummer, Versicherungsscheinnummer
+- name: Bezeichnung des Vertrags/Produkts
+- anbieter/bank: Name des Versicherers oder der Bank (Briefkopf/Logo)
+- beitrag/rate: regelmäßige Zahlung ohne €-Zeichen (z.B. 45.90)
+- polizzennummer: Vertragsnummer, Versicherungsscheinnummer
 - renteMit67Niedrig/Hoch: Prognose-Spanne aus Standmitteilung (2%/6%-Szenario)
-- renteGarantiert: nur bei konkretem Rentenbescheid, nicht bei Prognosen
-- Daten im Format YYYY-MM-DD
-- typ und intervall exakt wie oben angegeben
+- renteGarantiert: nur bei konkretem Rentenbescheid
+- Daten: YYYY-MM-DD
+- Zahlen: ohne Einheit, Punkt als Dezimaltrennzeichen
 
-Gib so viele Felder wie möglich an. NUR JSON, keine Erklärung.`;
+NUR JSON zurückgeben, keine Erklärungen oder zusätzlicher Text.`;
 
 const FIELDS_PROMPT = (category, fieldList) => {
   let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) alle erkennbaren Felder als JSON: ${fieldList}\n`;
@@ -94,32 +123,30 @@ const FIELDS_PROMPT = (category, fieldList) => {
   if (category === "versicherungen") {
     p += `renteMit67Niedrig: pessimistisches Szenario (2%), renteMit67Hoch: optimistisches Szenario (6%), renteGarantiert: nur aus Rentenbescheid\n`;
   }
-  p += `Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD.\nFülle alle erkennbaren Felder aus – der Nutzer kann sie korrigieren. NUR JSON.`;
+  p += `Zahlen ohne Einheit (45.90), Daten YYYY-MM-DD. Fülle alle erkennbaren Felder. NUR JSON, keine Erklärungen.`;
   return p;
 };
 
 const DOC_TYPE_PROMPT = `Dokumenttyp als JSON: {"typ":"..."}
 Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Rentenbescheid|Sonstiges`;
 
-const RECEIPT_PROMPT = `Analysiere diesen deutschen Beleg/Kassenbon. Antworte NUR mit JSON.
+const RECEIPT_PROMPT = `Analysiere diesen deutschen Beleg/Kassenbon. Antworte NUR mit JSON, keine Erklärungen.
 
 Felder:
 - datum: Belegdatum (YYYY-MM-DD)
 - betrag: Gesamtbetrag inkl. MwSt (Zahl ohne €)
-- mwst: dominanter MwSt-Satz (Zahl, z.B. 19 oder 7) – nur wenn eindeutig ein einzelner Satz
-- netto7: Nettobetrag der Positionen zu 7% MwSt (Speisen/Lebensmittel), falls auf dem Beleg ausgewiesen
-- netto19: Nettobetrag der Positionen zu 19% MwSt (Getränke/Alkohol/Sonstiges), falls auf dem Beleg ausgewiesen
-- partner: Name des Restaurants / Unternehmens / Lieferanten (gedruckt)
-- beschreibung: kurze Beschreibung der Leistung (z.B. "Geschäftsessen", "Taxi", "Fachliteratur")
+- mwst: dominanter MwSt-Satz (Zahl, z.B. 19 oder 7)
+- netto7: Nettobetrag zu 7% MwSt (Speisen), falls ausgewiesen
+- netto19: Nettobetrag zu 19% MwSt (Getränke), falls ausgewiesen
+- partner: Name des Restaurants / Unternehmens
+- beschreibung: kurze Beschreibung (z.B. "Geschäftsessen")
 - kategorie: Bewirtung|Fahrtkosten|Arbeitsmittel|Fortbildung|Bürobedarf|Sonstiges
-- teilnehmer: handschriftlich auf dem Beleg ergänzte Teilnehmernamen (kommagetrennt) – AUCH HANDSCHRIFT LESEN!
-- zweck: handschriftlich ergänzter geschäftlicher Anlass/Zweck – AUCH HANDSCHRIFT LESEN!
+- teilnehmer: handschriftlich ergänzte Teilnehmer (kommagetrennt) – HANDSCHRIFT LESEN!
+- zweck: handschriftlich ergänzter Anlass/Zweck – HANDSCHRIFT LESEN!
 
-WICHTIG:
-- Achte gezielt auf handschriftliche Ergänzungen, Notizen oder Stempel auf dem Beleg oder der Rückseite.
-- Erkenne sowohl gedruckten als auch handgeschriebenen Text.
-- Bei Restaurantbelegen: Prüfe ob 7% (Speisen) und 19% (Getränke) separat ausgewiesen sind.
-- Fülle alle erkennbaren Felder aus, NUR JSON zurückgeben.`;
+Bei Restaurantbelegen: 7% (Speisen) und 19% (Getränke) separat ausweisen falls vorhanden.
+Handschriftliche Ergänzungen auf dem Beleg oder Rückseite unbedingt lesen.
+NUR JSON, keine Erklärungen.`;
 
 export function buildDocumentName(typ, anbieter) {
   const date = new Date().toISOString().slice(0, 10);
