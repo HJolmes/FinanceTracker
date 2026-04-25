@@ -40,7 +40,26 @@ function WealthRow({ label, value, color, suffix }) {
   );
 }
 
-function SmartUpload({ onSmartUpload }) {
+function findMatchingEntry(data, result) {
+  if (!result || !data) return null;
+  const cat = result.category;
+  const entries = data[cat] || [];
+  if (result.polizzennummer) {
+    const match = entries.find((e) => e.polizzennummer === result.polizzennummer);
+    if (match) return match;
+  }
+  if (result.isin) {
+    const match = entries.find((e) => e.isin === result.isin);
+    if (match) return match;
+  }
+  if (result.iban) {
+    const match = entries.find((e) => e.iban === result.iban);
+    if (match) return match;
+  }
+  return null;
+}
+
+function SmartUpload({ onSmartUpload, onAddDocument, data }) {
   const [state, setState] = useState(null);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
@@ -81,6 +100,17 @@ function SmartUpload({ onSmartUpload }) {
     reset();
   };
 
+  const handleAddToExisting = () => {
+    if (!result || !pendingFile) return;
+    const match = findMatchingEntry(data, result);
+    if (!match) return;
+    const { category, ...fields } = result;
+    onAddDocument(category, match.id, fields, pendingFile);
+    reset();
+  };
+
+  const matchingEntry = result ? findMatchingEntry(data, result) : null;
+
   return (
     <div className="card" style={{ padding: "16px 20px" }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>🤖 Dokument hochladen & automatisch zuweisen</div>
@@ -108,21 +138,34 @@ function SmartUpload({ onSmartUpload }) {
         </div>
       )}
 
-      {state === "ai" && (
-        <div style={{ fontSize: 13, color: "var(--text2)" }}>🤖 KI analysiert Dokument…</div>
-      )}
+      {state === "ai" && <div style={{ fontSize: 13, color: "var(--text2)" }}>🤖 KI analysiert Dokument…</div>}
 
       {state === "done" && result && (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <span style={{ fontSize: 24 }}>{CATEGORIES[result.category]?.icon}</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--green)" }}>{CATEGORIES[result.category]?.label} erkannt</div>
               {result.name && <div style={{ fontSize: 12, color: "var(--text3)" }}>{result.name}</div>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-primary" onClick={handleCreate} style={{ flex: 1, fontSize: 13 }}>Eintrag erstellen →</button>
+
+          {matchingEntry && (
+            <div style={{ background: "rgba(61,214,140,0.1)", border: "1px solid var(--green)", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12 }}>
+              <div style={{ color: "var(--green)", fontWeight: 600, marginBottom: 2 }}>✓ Bestehende Police gefunden</div>
+              <div style={{ color: "var(--text2)" }}>{matchingEntry.name} · {matchingEntry.anbieter}</div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {matchingEntry && (
+              <button className="btn-primary" onClick={handleAddToExisting} style={{ flex: 2, fontSize: 13 }}>
+                📎 Zur Police hinzufügen
+              </button>
+            )}
+            <button className={matchingEntry ? "btn-secondary" : "btn-primary"} onClick={handleCreate} style={{ flex: matchingEntry ? 1 : 2, fontSize: 13 }}>
+              {matchingEntry ? "Neuer Eintrag" : "Eintrag erstellen →"}
+            </button>
             <button className="btn-ghost" onClick={reset} style={{ fontSize: 18, padding: "8px 12px" }}>✕</button>
           </div>
         </div>
@@ -138,7 +181,7 @@ function SmartUpload({ onSmartUpload }) {
   );
 }
 
-export default function Dashboard({ data, onSmartUpload }) {
+export default function Dashboard({ data, onSmartUpload, onAddDocument }) {
   const monthlyKosten = {
     versicherungen: sumMonthly(data.versicherungen || []),
     sparplaene: sumMonthly(data.sparplaene || []),
@@ -154,14 +197,12 @@ export default function Dashboard({ data, onSmartUpload }) {
     ? new Date(data.lastUpdated).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
     : "–";
 
-  // Vermögensübersicht
   const bankguthaben = sumField(data.bankkonten || [], "kontostand");
   const depotwert = sumField(data.sparplaene || [], "depotwert");
   const versicherungswert = sumField(data.versicherungen || [], "rueckkaufswert");
   const gesamtvermoegen = bankguthaben + depotwert + versicherungswert;
   const hasVermoegen = gesamtvermoegen > 0;
 
-  // Rentenvorschau
   const monatsrenteJetzt = sumField(data.versicherungen || [], "monatsrenteJetzt");
   const monatsrenteMit67 = sumField(data.versicherungen || [], "monatsrenteMit67");
   const hasRente = monatsrenteJetzt > 0 || monatsrenteMit67 > 0;
@@ -174,26 +215,24 @@ export default function Dashboard({ data, onSmartUpload }) {
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-      <SmartUpload onSmartUpload={onSmartUpload} />
+      <SmartUpload onSmartUpload={onSmartUpload} onAddDocument={onAddDocument} data={data} />
 
       {(hasVermoegen || hasRente) && (
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>💰 Vermögensübersicht</div>
-
           {hasVermoegen && (
             <>
               {bankguthaben > 0 && <WealthRow label="🏦 Bankguthaben" value={bankguthaben} color="var(--green)" />}
               {depotwert > 0 && <WealthRow label="📈 Depotwert" value={depotwert} color="var(--green)" />}
               {versicherungswert > 0 && <WealthRow label="🛡️ Versicherungswert (Rückkauf)" value={versicherungswert} color="var(--accent)" />}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, marginTop: 4 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Gesamt</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Gesamt</div>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--green)" }}>
                   {gesamtvermoegen.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
                 </div>
               </div>
             </>
           )}
-
           {hasRente && (
             <>
               {hasVermoegen && <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />}
@@ -202,16 +241,10 @@ export default function Dashboard({ data, onSmartUpload }) {
               {monatsrenteMit67 > 0 && <WealthRow label="Monatliche Rente (mit 67)" value={monatsrenteMit67} suffix="€/Monat" color="var(--green)" />}
               {jahreZu67 !== null && (
                 <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>
-                  {jahreZu67 > 0
-                    ? `⏳ Noch ${jahreZu67} Jahre bis zum Rentenalter (67)`
-                    : "✅ Rentenalter bereits erreicht"}
+                  {jahreZu67 > 0 ? `⏳ Noch ${jahreZu67} Jahre bis zum Rentenalter (67)` : "✅ Rentenalter bereits erreicht"}
                 </div>
               )}
-              {!geburtsjahr && (
-                <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>
-                  💡 Geburtsjahr in ⚙️ Einstellungen hinterlegen für Rentenalter-Berechnung
-                </div>
-              )}
+              {!geburtsjahr && <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>💡 Geburtsjahr in ⚙️ Einstellungen hinterlegen</div>}
             </>
           )}
         </div>
@@ -265,11 +298,7 @@ export default function Dashboard({ data, onSmartUpload }) {
               <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--text)" }}>
                 {monthly > 0 ? monthly.toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : "—"}
               </div>
-              {balance > 0 && (
-                <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>
-                  {balance.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} Bestand
-                </div>
-              )}
+              {balance > 0 && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>{balance.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} Bestand</div>}
               <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{entries.length} Einträge</div>
             </div>
           );
