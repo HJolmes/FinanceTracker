@@ -8,6 +8,7 @@ const TABS = [
   { id: "sparplaene", label: "Sparpläne", icon: "📈" },
   { id: "leasing", label: "Leasing", icon: "🚗" },
   { id: "bankkonten", label: "Konten", fullLabel: "Bankkonten", icon: "🏦" },
+  { id: "steuerbelege", label: "Steuern", fullLabel: "Steuerbelege", icon: "🧾" },
 ];
 
 export default function NavBar({ active, onChange, mode = "bottom", syncing, onSettings, onLogout }) {
@@ -27,7 +28,7 @@ export default function NavBar({ active, onChange, mode = "bottom", syncing, onS
           </div>
         </div>
 
-        <div style={{ flex: 1, paddingTop: 8 }}>
+        <div style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -94,15 +95,15 @@ export default function NavBar({ active, onChange, mode = "bottom", syncing, onS
           style={{
             flex: 1, display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
-            padding: "10px 4px", gap: 3, background: "transparent",
+            padding: "8px 2px", gap: 2, background: "transparent",
             borderTop: active === tab.id ? "2px solid var(--accent)" : "2px solid transparent",
             transition: "all 0.15s",
           }}
         >
-          <span style={{ fontSize: 18 }}>{tab.icon}</span>
+          <span style={{ fontSize: 16 }}>{tab.icon}</span>
           <span style={{
-            fontSize: 10, color: active === tab.id ? "var(--accent)" : "var(--text3)",
-            fontWeight: active === tab.id ? 600 : 400, letterSpacing: "0.02em",
+            fontSize: 9, color: active === tab.id ? "var(--accent)" : "var(--text3)",
+            fontWeight: active === tab.id ? 600 : 400, letterSpacing: "0.01em",
           }}>{tab.label}</span>
         </button>
       ))}
