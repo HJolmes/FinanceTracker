@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/FinanceTracker/static/css/main.394c786b.css",
-    "main.js": "/FinanceTracker/static/js/main.69aed1da.js",
+    "main.js": "/FinanceTracker/static/js/main.a445344a.js",
     "index.html": "/FinanceTracker/index.html",
     "main.394c786b.css.map": "/FinanceTracker/static/css/main.394c786b.css.map",
-    "main.69aed1da.js.map": "/FinanceTracker/static/js/main.69aed1da.js.map"
+    "main.a445344a.js.map": "/FinanceTracker/static/js/main.a445344a.js.map"
   },
   "entrypoints": [
     "static/css/main.394c786b.css",
-    "static/js/main.69aed1da.js"
+    "static/js/main.a445344a.js"
   ]
 }
