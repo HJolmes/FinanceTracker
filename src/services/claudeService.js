@@ -62,7 +62,7 @@ const DETECT_PROMPT = `Analysiere dieses deutsche Finanzdokument. Antworte NUR m
 
 Kategorie: versicherungen|sparplaene|leasing|bankkonten
 Felder:
-- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer,rueckkaufswert,monatsrenteJetzt,monatsrenteMit67
+- versicherungen: name,anbieter,typ,beitrag,intervall,faelligkeit,polizzennummer,rueckkaufswert,monatsrenteJetzt,renteMit67Niedrig,renteMit67Hoch,renteGarantiert
 - sparplaene: name,anbieter,typ,beitrag,intervall,depot,isin,startdatum,depotwert
 - leasing: name,anbieter,typ,rate,intervall,laufzeit,restwert,faelligkeit
 - bankkonten: name,bank,typ,iban,kontonummer,kontostand
@@ -73,17 +73,29 @@ typ leasing: ${TYPEN.leasing}
 typ bankkonten: ${TYPEN.bankkonten}
 intervall: ${INTERVALL}
 
-Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie angegeben, nur sichere Felder.
-Beispiel: {"category":"versicherungen","name":"Allianz Haftpflicht","anbieter":"Allianz","typ":"Haftpflicht","beitrag":"8.90","intervall":"monatlich"}`;
+Rentenfelder (nur bei Rentenversicherung/Lebensversicherung):
+- renteMit67Niedrig: schlechteste Prognose Monatsrente ab 67 (z.B. 2% Szenario aus Standmitteilung)
+- renteMit67Hoch: beste Prognose Monatsrente ab 67 (z.B. 6% Szenario aus Standmitteilung)
+- renteGarantiert: garantierte Monatsrente aus konkretem Rentenbescheid (NICHT aus Standmitteilung)
 
-const FIELDS_PROMPT = (category, fieldList) =>
-  `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}
-typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten
+Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, typ+intervall exakt wie angegeben, nur sichere Felder.
+Beispiel: {"category":"versicherungen","name":"Allianz RV","typ":"Rentenversicherung","renteMit67Niedrig":"320.00","renteMit67Hoch":"580.00"}`;
+
+const FIELDS_PROMPT = (category, fieldList) => {
+  let p = `Extrahiere aus diesem deutschen Finanzdokument (${category}) folgende Felder als JSON: ${fieldList}
+`;
+  p += `typ: ${TYPEN[category] || "Sonstige"} — exakt so, Gross-/Kleinschreibung beachten
 intervall: ${INTERVALL}
-Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, nur sichere Felder, NUR JSON.`;
+`;
+  if (category === "versicherungen") {
+    p += `renteMit67Niedrig: pessimistisches Szenario (2%), renteMit67Hoch: optimistisches Szenario (6%), renteGarantiert: nur aus Rentenbescheid\n`;
+  }
+  p += `Zahlen ohne Waehrungszeichen (45.90), Daten YYYY-MM-DD, nur sichere Felder, NUR JSON.`;
+  return p;
+};
 
 const DOC_TYPE_PROMPT = `Dokumenttyp als JSON: {"typ":"..."}
-Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Sonstiges`;
+Erlaubt: Standmitteilung|Beitragsrechnung|Versicherungsschein|Nachtrag|Mahnung|Kuendigung|Kontoauszug|Depotauszug|Rentenbescheid|Sonstiges`;
 
 const RECEIPT_PROMPT = `Analysiere diesen Beleg/Kassenbon. Antworte NUR mit JSON.
 Felder: datum (YYYY-MM-DD), betrag (Zahl ohne €), mwst (MwSt-Satz als Zahl z.B. 19), partner (Firma/Lieferant), beschreibung (kurze Beschreibung), kategorie (Bewirtung|Fahrtkosten|Arbeitsmittel|Fortbildung|Bürobedarf|Sonstiges), zweck (geschäftlicher Zweck).
