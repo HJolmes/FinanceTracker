@@ -1,7 +1,8 @@
 // src/components/AddEntry.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { CATEGORY_CONFIG } from "./EntryList";
 import { uploadDocument } from "../services/oneDriveService";
+import { lookupTicker } from "../services/marketDataService";
 
 const FIELD_LABELS = {
   name: "Bezeichnung *",
@@ -16,7 +17,7 @@ const FIELD_LABELS = {
   polizzennummer: "Polizzennummer",
   isin: "ISIN",
   depot: "Depot / Broker",
-  ticker: "Börsen-Ticker (z.B. IWDA.AS)",
+  ticker: "Börsen-Ticker",
   anteile: "Anteile im Besitz (Stück)",
   startdatum: "Startdatum",
   laufzeit: "Laufzeit (Monate)",
@@ -35,6 +36,8 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
   const [form, setForm] = useState(entry || {});
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [tickerLooking, setTickerLooking] = useState(false);
+  const tickerTimer = useRef(null);
 
   useEffect(() => {
     if (entry) setForm(entry);
@@ -42,6 +45,17 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+
+    // Auto-lookup ticker when ISIN changes (only for sparplaene)
+    if (field === "isin" && category === "sparplaene" && value.length >= 12) {
+      clearTimeout(tickerTimer.current);
+      tickerTimer.current = setTimeout(async () => {
+        setTickerLooking(true);
+        const found = await lookupTicker(value);
+        setTickerLooking(false);
+        if (found) setForm((prev) => ({ ...prev, ticker: found }));
+      }, 600);
+    }
   };
 
   const handleFileUpload = async (file) => {
@@ -79,7 +93,7 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexShrink: 0 }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 20 }}>
-            {entry ? "Eintrag bearbeiten" : `Neuer Eintrag`}
+            {entry ? "Eintrag bearbeiten" : "Neuer Eintrag"}
           </div>
           <button className="btn-ghost" onClick={onClose}>✕</button>
         </div>
@@ -121,15 +135,20 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
 
               if (field === "ticker") return (
                 <div key={field}>
-                  <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, marginTop: 4 }}>
-                    Kursverlauf
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <label style={{ margin: 0 }}>{FIELD_LABELS.ticker}</label>
+                    {tickerLooking && (
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>wird gesucht…</span>
+                    )}
+                    {!tickerLooking && form.ticker && (
+                      <span style={{ fontSize: 11, color: "var(--green)" }}>✓ automatisch erkannt</span>
+                    )}
                   </div>
-                  <label>{FIELD_LABELS.ticker}</label>
                   <input
                     type="text"
                     value={form[field] || ""}
                     onChange={(e) => handleChange(field, e.target.value.toUpperCase())}
-                    placeholder="z.B. IWDA.AS, VWCE.DE, MSFT"
+                    placeholder="Wird aus ISIN automatisch befüllt"
                   />
                 </div>
               );
