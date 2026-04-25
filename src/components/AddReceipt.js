@@ -10,10 +10,13 @@ export default function AddReceipt({ receipt, onSave, onClose, instance, account
     datum: new Date().toISOString().slice(0, 10),
     betrag: "",
     mwst: "",
+    netto7: "",
+    netto19: "",
     kategorie: "Sonstiges",
     beschreibung: "",
     partner: "",
     zweck: "",
+    teilnehmer: "",
     ...(receipt || {}),
   });
   const [dokument, setDokument] = useState(receipt?.dokument || "");
@@ -22,24 +25,32 @@ export default function AddReceipt({ receipt, onSave, onClose, instance, account
   const fileRef = useRef();
 
   const set = (field, val) => setForm((f) => ({ ...f, [field]: val }));
+  const isBewirtung = form.kategorie === "Bewirtung";
 
   const handleFile = async (file) => {
     if (!file) return;
     setExtracting(true);
     try {
       const fields = await extractReceiptFields(file);
-      if (fields.datum) set("datum", fields.datum);
-      if (fields.betrag) set("betrag", String(fields.betrag));
-      if (fields.mwst) set("mwst", String(fields.mwst));
-      if (fields.kategorie && KATEGORIEN.includes(fields.kategorie)) set("kategorie", fields.kategorie);
-      if (fields.beschreibung) set("beschreibung", fields.beschreibung);
-      if (fields.partner) set("partner", fields.partner);
-      if (fields.zweck) set("zweck", fields.zweck);
+      setForm((f) => ({
+        ...f,
+        ...(fields.datum && { datum: fields.datum }),
+        ...(fields.betrag && { betrag: String(fields.betrag) }),
+        ...(fields.mwst && { mwst: String(fields.mwst) }),
+        ...(fields.netto7 && { netto7: String(fields.netto7) }),
+        ...(fields.netto19 && { netto19: String(fields.netto19) }),
+        ...(fields.kategorie && KATEGORIEN.includes(fields.kategorie) && { kategorie: fields.kategorie }),
+        ...(fields.beschreibung && { beschreibung: fields.beschreibung }),
+        ...(fields.partner && { partner: fields.partner }),
+        ...(fields.zweck && { zweck: fields.zweck }),
+        ...(fields.teilnehmer && { teilnehmer: fields.teilnehmer }),
+      }));
     } catch {}
     setExtracting(false);
     setUploading(true);
     try {
-      const url = await uploadDocument(instance, accounts, file, "steuerbelege",
+      const url = await uploadDocument(
+        instance, accounts, file, "steuerbelege",
         form.datum?.slice(0, 7) || "allgemein",
         { customName: `${form.datum || new Date().toISOString().slice(0, 10)}_Beleg_${file.name}` }
       );
@@ -68,6 +79,8 @@ export default function AddReceipt({ receipt, onSave, onClose, instance, account
         </div>
 
         <div style={{ padding: "16px 20px 32px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Datei-Upload */}
           <div
             style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius)", padding: 16, textAlign: "center", cursor: "pointer", background: "var(--bg3)" }}
             onClick={() => fileRef.current?.click()}
@@ -83,11 +96,12 @@ export default function AddReceipt({ receipt, onSave, onClose, instance, account
             ) : (
               <div style={{ color: "var(--text3)", fontSize: 13 }}>
                 📸 Beleg hochladen (Foto / PDF)<br />
-                <span style={{ fontSize: 11 }}>Felder werden automatisch ausgefüllt</span>
+                <span style={{ fontSize: 11 }}>Felder + handschriftliche Ergänzungen werden automatisch erkannt</span>
               </div>
             )}
           </div>
 
+          {/* Datum + Betrag */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <label>Datum</label>
@@ -99,39 +113,92 @@ export default function AddReceipt({ receipt, onSave, onClose, instance, account
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+          {/* Kategorie */}
+          <div>
+            <label>Kategorie</label>
+            <select value={form.kategorie} onChange={(e) => set("kategorie", e.target.value)}>
+              {KATEGORIEN.map((k) => <option key={k}>{k}</option>)}
+            </select>
+          </div>
+
+          {/* MwSt: Aufschlüsselung für Bewirtung, einfacher Satz sonst */}
+          {isBewirtung ? (
             <div>
-              <label>Kategorie</label>
-              <select value={form.kategorie} onChange={(e) => set("kategorie", e.target.value)}>
-                {KATEGORIEN.map((k) => <option key={k}>{k}</option>)}
-              </select>
+              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                MwSt-Aufschlüsselung (Bewirtungsbeleg)
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label>Netto Speisen – 7% (€)</label>
+                  <input type="number" placeholder="0.00" step="0.01" value={form.netto7} onChange={(e) => set("netto7", e.target.value)} />
+                </div>
+                <div>
+                  <label>Netto Getränke – 19% (€)</label>
+                  <input type="number" placeholder="0.00" step="0.01" value={form.netto19} onChange={(e) => set("netto19", e.target.value)} />
+                </div>
+              </div>
             </div>
+          ) : (
             <div>
               <label>MwSt. %</label>
               <input type="number" placeholder="19" value={form.mwst} onChange={(e) => set("mwst", e.target.value)} />
             </div>
-          </div>
+          )}
 
+          {/* Partner / Restaurant */}
           <div>
-            <label>Geschäftspartner / Lieferant</label>
-            <input type="text" placeholder="Mustermann GmbH" value={form.partner} onChange={(e) => set("partner", e.target.value)} />
+            <label>{isBewirtung ? "Restaurant / Veranstaltungsort" : "Geschäftspartner / Lieferant"}</label>
+            <input
+              type="text"
+              placeholder={isBewirtung ? "Zum goldenen Löwen" : "Mustermann GmbH"}
+              value={form.partner}
+              onChange={(e) => set("partner", e.target.value)}
+            />
           </div>
 
+          {/* Beschreibung */}
           <div>
             <label>Beschreibung</label>
             <input type="text" placeholder="Mittagessen, Taxi, Fachliteratur…" value={form.beschreibung} onChange={(e) => set("beschreibung", e.target.value)} />
           </div>
 
-          {form.kategorie === "Bewirtung" && (
-            <div>
-              <label>Geschäftlicher Zweck (Pflicht bei Bewirtung)</label>
-              <input type="text" placeholder="Projektbesprechung mit Kunde XY" value={form.zweck} onChange={(e) => set("zweck", e.target.value)} />
-            </div>
+          {/* Bewirtungs-Pflichtfelder */}
+          {isBewirtung && (
+            <>
+              <div>
+                <label>Teilnehmer – alle Personen</label>
+                <textarea
+                  rows={2}
+                  placeholder="Max Müller, Jana Schmidt, ich selbst…"
+                  value={form.teilnehmer}
+                  onChange={(e) => set("teilnehmer", e.target.value)}
+                  style={{ resize: "vertical" }}
+                />
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
+                  Alle Teilnehmer inkl. Bewirtender (steuerl. Pflicht) · wird ggf. handschriftlich erkannt
+                </div>
+              </div>
+              <div>
+                <label>Geschäftlicher Anlass / Zweck – Pflicht</label>
+                <input
+                  type="text"
+                  placeholder="Projekt-Kickoff Kunde XY – Planung Q3"
+                  value={form.zweck}
+                  onChange={(e) => set("zweck", e.target.value)}
+                />
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>
+                  Konkreter Anlass – nicht nur „Kundenpflege“ (wird ggf. handschriftlich erkannt)
+                </div>
+              </div>
+            </>
           )}
 
-          <button className="btn-primary" onClick={handleSave}
+          <button
+            className="btn-primary"
+            onClick={handleSave}
             disabled={!form.betrag}
-            style={{ marginTop: 4, opacity: !form.betrag ? 0.5 : 1 }}>
+            style={{ marginTop: 4, opacity: !form.betrag ? 0.5 : 1 }}
+          >
             {receipt?.id ? "Speichern" : "Beleg hinzufügen"}
           </button>
         </div>
