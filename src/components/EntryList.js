@@ -30,7 +30,6 @@ function getMainValue(category, entry) {
   return null;
 }
 
-// Returns reminder info only when the last upload is older than 7 days
 function getUpdateReminder(dokumente) {
   if (!dokumente || dokumente.length === 0) return null;
   const datesMs = dokumente
@@ -40,7 +39,6 @@ function getUpdateReminder(dokumente) {
   if (datesMs.length === 0) return null;
   const lastMs = datesMs[0];
   const now = Date.now();
-  // Grace period: newly uploaded docs don’t trigger a reminder
   if ((now - lastMs) < 7 * 24 * 60 * 60 * 1000) return null;
   const intervalMs = datesMs.length >= 2
     ? (datesMs[0] - datesMs[datesMs.length - 1]) / (datesMs.length - 1)
@@ -88,7 +86,7 @@ function RentenSpanneRow({ niedrig, hoch }) {
   );
 }
 
-function EntryCard({ category, entry, onDelete, onEdit }) {
+function EntryCard({ category, entry, onDelete, onEdit, onDeleteDocument }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const value = getMainValue(category, entry);
@@ -166,8 +164,6 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
               {entry.depotwert && <BestandRow label="Depotwert (aktuell)" value={entry.depotwert} highlight />}
               {entry.kontostand && <BestandRow label="Kontostand (aktuell)" value={entry.kontostand} highlight />}
               {entry.monatsrenteJetzt && <BestandRow label="Monatliche Rente (aktuell)" value={entry.monatsrenteJetzt} />}
-
-              {/* Rentenvorschau mit 67 */}
               {hasGuaranteed && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                   <div>
@@ -197,6 +193,15 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
                     </div>
                   </div>
                   <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)", flexShrink: 0 }}>Öffnen</a>
+                  {onDeleteDocument && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteDocument(entry.id, i); }}
+                      style={{ fontSize: 13, color: "var(--red)", background: "transparent", padding: "2px 6px", border: "none", cursor: "pointer", flexShrink: 0 }}
+                      title="Dokument entfernen"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -220,7 +225,7 @@ function EntryCard({ category, entry, onDelete, onEdit }) {
   );
 }
 
-export default function EntryList({ category, entries, onDelete, onEdit }) {
+export default function EntryList({ category, entries, onDelete, onEdit, onDeleteDocument }) {
   const config = CATEGORY_CONFIG[category];
   if (!config) return null;
   return (
@@ -238,7 +243,7 @@ export default function EntryList({ category, entries, onDelete, onEdit }) {
           Noch keine {config.label} – tippe auf + um einen Eintrag anzulegen
         </div>
       ) : entries.map((entry) => (
-        <EntryCard key={entry.id} category={category} entry={entry} onDelete={onDelete} onEdit={onEdit} />
+        <EntryCard key={entry.id} category={category} entry={entry} onDelete={onDelete} onEdit={onEdit} onDeleteDocument={onDeleteDocument} />
       ))}
     </div>
   );
