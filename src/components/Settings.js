@@ -4,6 +4,18 @@ import { getClaudeApiKey, saveClaudeApiKey } from "../services/claudeService";
 import { APP_VERSION, APP_CHANGELOG } from "../version";
 import BankingConnect from "./BankingConnect";
 
+async function forceUpdate() {
+  if ("serviceWorker" in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) await reg.unregister();
+  }
+  if ("caches" in window) {
+    const keys = await caches.keys();
+    for (const key of keys) await caches.delete(key);
+  }
+  window.location.reload(true);
+}
+
 export default function Settings({ onShowWhatsNew }) {
   const [settings, setSettings] = useState(getSettings());
   const [claudeKey, setClaudeKey] = useState(getClaudeApiKey());
@@ -11,6 +23,7 @@ export default function Settings({ onShowWhatsNew }) {
   const [savedKey, setSavedKey] = useState(false);
   const [savedPersonal, setSavedPersonal] = useState(false);
   const [savedBanking, setSavedBanking] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const handleSavePath = () => {
     const path = settings.oneDriveFolderPath.trim();
@@ -38,6 +51,11 @@ export default function Settings({ onShowWhatsNew }) {
     setTimeout(() => setSavedBanking(false), 2500);
   };
 
+  const handleForceUpdate = async () => {
+    setUpdating(true);
+    await forceUpdate();
+  };
+
   const previewPath = settings.oneDriveFolderPath || "…";
   const currentYear = new Date().getFullYear();
   const geburtsjahr = parseInt(settings.geburtsjahr);
@@ -53,20 +71,37 @@ export default function Settings({ onShowWhatsNew }) {
       </div>
 
       {/* Update-Info */}
-      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>🔍 Letzte Aktualisierung</div>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>
-            {APP_VERSION}{changelog ? ` · ${changelog.date}` : ""}
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>🔍 Letzte Aktualisierung</div>
+            <div style={{ fontSize: 12, color: "var(--text3)" }}>
+              {APP_VERSION}{changelog ? ` · ${changelog.date}` : ""}
+            </div>
           </div>
+          <button
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: "8px 16px", flexShrink: 0, whiteSpace: "nowrap" }}
+            onClick={onShowWhatsNew}
+          >
+            Was ist neu?
+          </button>
         </div>
         <button
-          className="btn-secondary"
-          style={{ fontSize: 12, padding: "8px 16px", flexShrink: 0, whiteSpace: "nowrap" }}
-          onClick={onShowWhatsNew}
+          className="btn-primary"
+          style={{ fontSize: 13, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          onClick={handleForceUpdate}
+          disabled={updating}
         >
-          Was ist neu?
+          {updating ? (
+            <>⏳ Wird aktualisiert…</>
+          ) : (
+            <>🔄 App aktualisieren &amp; neu laden</>
+          )}
         </button>
+        <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.6 }}>
+          Löscht den lokalen Cache und lädt die neueste Version der App. Deine OneDrive-Daten bleiben erhalten.
+        </div>
       </div>
 
       {/* Persönliche Daten */}
