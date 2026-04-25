@@ -147,3 +147,9 @@ label {
   from { opacity: 0; transform: translateY(100%); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Desktop adjustments */
+@media (min-width: 768px) {
+  .card { padding: 24px 28px; }
+  body { font-size: 15px; }
+}
