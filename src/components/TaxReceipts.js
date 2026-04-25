@@ -3,8 +3,21 @@ import React, { useState } from "react";
 
 const KATEGORIEN = ["Bewirtung", "Fahrtkosten", "Arbeitsmittel", "Fortbildung", "Bürobedarf", "Sonstiges"];
 
+function DetailRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ fontSize: 13, color: "var(--text)", marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
 function ReceiptCard({ receipt, onDelete, onEdit }) {
   const [expanded, setExpanded] = useState(false);
+  const isBewirtung = receipt.kategorie === "Bewirtung";
+
+  const hasMwstSplit = receipt.netto7 || receipt.netto19;
 
   return (
     <div
@@ -23,26 +36,61 @@ function ReceiptCard({ receipt, onDelete, onEdit }) {
           {receipt.partner && receipt.beschreibung && (
             <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 1 }}>{receipt.partner}</div>
           )}
+          {/* Pflichtfelder-Warnung für Bewirtung */}
+          {isBewirtung && (!receipt.zweck || !receipt.teilnehmer) && (
+            <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 4 }}>
+              ⚠️ {!receipt.zweck && !receipt.teilnehmer ? "Anlass + Teilnehmer fehlen" : !receipt.zweck ? "Geschäftl. Anlass fehlt" : "Teilnehmer fehlen"}
+            </div>
+          )}
         </div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent)", flexShrink: 0, marginLeft: 12 }}>
-          {Number(receipt.betrag || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+          {Number(receipt.betrag || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
         </div>
       </div>
 
       {expanded && (
         <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-          {receipt.zweck && (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Zweck</div>
-              <div style={{ fontSize: 13, color: "var(--text)", marginTop: 2 }}>{receipt.zweck}</div>
-            </div>
+
+          {/* Bewirtungs-Pflichtfelder */}
+          {isBewirtung && (
+            <>
+              <DetailRow label="Geschäftlicher Anlass" value={receipt.zweck} />
+              <DetailRow label="Teilnehmer" value={receipt.teilnehmer} />
+            </>
           )}
-          {receipt.mwst && (
+
+          {/* MwSt-Anzeige */}
+          {isBewirtung && hasMwstSplit ? (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>MwSt.</div>
-              <div style={{ fontSize: 13, color: "var(--text)", marginTop: 2 }}>{receipt.mwst} %</div>
+              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>MwSt-Aufschlüsselung</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {receipt.netto7 && (
+                  <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "6px 10px" }}>
+                    <div style={{ fontSize: 10, color: "var(--text3)" }}>Speisen (7%)</div>
+                    <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+                      {Number(receipt.netto7).toLocaleString("de-DE", { minimumFractionDigits: 2 })} € Netto
+                    </div>
+                  </div>
+                )}
+                {receipt.netto19 && (
+                  <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "6px 10px" }}>
+                    <div style={{ fontSize: 10, color: "var(--text3)" }}>Getränke (19%)</div>
+                    <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+                      {Number(receipt.netto19).toLocaleString("de-DE", { minimumFractionDigits: 2 })} € Netto
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+          ) : receipt.mwst ? (
+            <DetailRow label="MwSt." value={`${receipt.mwst} %`} />
+          ) : null}
+
+          {/* Zweck für Nicht-Bewirtung */}
+          {!isBewirtung && receipt.zweck && (
+            <DetailRow label="Zweck" value={receipt.zweck} />
           )}
+
           {receipt.dokument && (
             <div style={{ marginBottom: 8 }}>
               <a href={receipt.dokument} target="_blank" rel="noreferrer"
@@ -52,6 +100,7 @@ function ReceiptCard({ receipt, onDelete, onEdit }) {
               </a>
             </div>
           )}
+
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button className="btn-secondary" style={{ flex: 1, fontSize: 12, padding: "8px" }}
               onClick={(e) => { e.stopPropagation(); onEdit(receipt); }}>
@@ -89,6 +138,8 @@ export default function TaxReceipts({ receipts = [], onDelete, onEdit }) {
   const total = filtered.reduce((sum, r) => sum + (Number(r.betrag) || 0), 0);
   const activeCats = KATEGORIEN.filter((k) => grouped[k]?.length > 0);
 
+  const bewirtungMissing = (grouped["Bewirtung"] || []).filter((r) => !r.zweck || !r.teilnehmer).length;
+
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -110,7 +161,7 @@ export default function TaxReceipts({ receipts = [], onDelete, onEdit }) {
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
           <span style={{ fontSize: 13, color: "var(--text3)" }}>Gesamt {selectedYear}</span>
           <span style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
-            {total.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
+            {total.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
           </span>
         </div>
         {activeCats.length > 0 && (
@@ -122,17 +173,22 @@ export default function TaxReceipts({ receipts = [], onDelete, onEdit }) {
                   fontSize: 11, color: "var(--text2)", background: "var(--surface)",
                   padding: "3px 8px", borderRadius: 12, border: "1px solid var(--border)",
                 }}>
-                  {k}: {catTotal.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
+                  {k}: {catTotal.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
                 </div>
               );
             })}
+          </div>
+        )}
+        {bewirtungMissing > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--accent)", padding: "6px 10px", background: "rgba(232,168,56,0.10)", borderRadius: 8, border: "1px solid rgba(232,168,56,0.25)" }}>
+            ⚠️ {bewirtungMissing} Bewirtungsbeleg{bewirtungMissing > 1 ? "e" : ""} ohne vollständige Pflichtangaben (Anlass / Teilnehmer)
           </div>
         )}
       </div>
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text3)" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🧾</div>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🧧</div>
           <div style={{ fontSize: 15 }}>Noch keine Belege für {selectedYear}</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>Beleg hinzufügen mit dem + Button</div>
         </div>
