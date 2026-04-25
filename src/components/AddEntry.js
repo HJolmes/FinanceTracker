@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { CATEGORY_CONFIG } from "./EntryList";
 import { uploadDocument } from "../services/oneDriveService";
 import { extractTextFromFile, isPDF } from "../services/ocrService";
-import { mapTextToFields, mapPDFToFields, getClaudeApiKey } from "../services/claudeService";
+import { mapTextToFields, mapPDFToFields, getClaudeApiKey, detectDocumentType, buildDocumentName } from "../services/claudeService";
 
 const FIELD_LABELS = {
   name: "Bezeichnung *", anbieter: "Anbieter", bank: "Bank", typ: "Typ",
@@ -18,13 +18,20 @@ const FIELD_LABELS = {
 const NUMBER_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
 const DECIMAL_FIELDS = ["beitrag","rate","betrag","restwert","rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"];
 const INTERVALL_OPTIONS = ["monatlich", "quartalsweise", "halbjährlich", "jährlich", "einmalig"];
+const BESTAND_FIRST = ["rueckkaufswert", "depotwert", "kontostand"];
 
 export default function AddEntry({ category, entry, onSave, onClose, instance, accounts, pendingFile }) {
   const config = CATEGORY_CONFIG[category];
-  const [form, setForm] = useState(entry || {});
+  const [form, setForm] = useState(() => {
+    const base = entry || {};
+    // Normalize legacy single-dokument to dokumente array
+    if (base.dokument && !base.dokumente?.length) {
+      return { ...base, dokumente: [{ url: base.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] };
+    }
+    return { ...base, dokumente: base.dokumente || [] };
+  });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
   const [ocrState, setOcrState] = useState(null);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrError, setOcrError] = useState("");
@@ -32,46 +39,72 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
   const isFromSmartUpload = !!pendingFile;
 
   const filledFieldCount = Object.entries(form)
-    .filter(([k, v]) => k !== "dokument" && v && String(v).trim() !== "").length;
+    .filter(([k, v]) => !["dokument", "dokumente", "notiz"].includes(k) && v && String(v).trim() !== "").length;
+
+  const addDoc = (doc) => setForm((prev) => {
+    const dokumente = [doc, ...(prev.dokumente || [])];
+    return { ...prev, dokument: doc.url, dokumente };
+  });
+
+  const removeDoc = (idx) => setForm((prev) => {
+    const dokumente = (prev.dokumente || []).filter((_, i) => i !== idx);
+    return { ...prev, dokument: dokumente[0]?.url || "", dokumente };
+  });
+
+  const doUpload = async (file, currentForm) => {
+    const typ = await detectDocumentType(file);
+    const anbieter = currentForm.anbieter || currentForm.bank || "";
+    const subfolder = currentForm.polizzennummer || currentForm.isin || currentForm.id || "neu";
+    const name = buildDocumentName(typ, anbieter);
+    const url = await uploadDocument(instance, accounts, file, category, subfolder, { customName: name, subfolder });
+    return { url, name, typ, datum: new Date().toISOString().slice(0, 10) };
+  };
 
   useEffect(() => {
     if (!pendingFile) return;
-    setSelectedFile(pendingFile);
     setUploading(true);
-    uploadDocument(instance, accounts, pendingFile, category, "new_" + Date.now())
-      .then((url) => setForm((prev) => ({ ...prev, dokument: url })))
+    doUpload(pendingFile, form)
+      .then((doc) => addDoc(doc))
       .catch(() => {})
       .finally(() => setUploading(false));
   }, []); // eslint-disable-line
 
-  useEffect(() => { if (entry) setForm(entry); }, [entry]);
+  useEffect(() => {
+    if (entry) {
+      const base = entry;
+      if (base.dokument && !base.dokumente?.length) {
+        setForm({ ...base, dokumente: [{ url: base.dokument, name: "Dokument", typ: "Sonstiges", datum: "" }] });
+      } else {
+        setForm({ ...base, dokumente: base.dokumente || [] });
+      }
+    }
+  }, [entry]);
 
   const handleChange = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleFileUpload = async (file) => {
-    setSelectedFile(file);
     setOcrState(null);
     setOcrError("");
     setUploading(true);
     try {
-      const url = await uploadDocument(instance, accounts, file, category, form.id || "new_" + Date.now());
-      setForm((prev) => ({ ...prev, dokument: url }));
+      const doc = await doUpload(file, form);
+      addDoc(doc);
     } catch { alert("Upload fehlgeschlagen."); }
     finally { setUploading(false); }
   };
 
-  const handleExtract = async () => {
-    if (!selectedFile) return;
+  const handleExtract = async (file) => {
+    if (!file) return;
     setOcrError("");
     try {
       let extracted;
-      if (isPDF(selectedFile)) {
+      if (isPDF(file)) {
         setOcrState("ai");
-        extracted = await mapPDFToFields(selectedFile, category, config.fields);
+        extracted = await mapPDFToFields(file, category, config.fields);
       } else {
         setOcrState("ocr");
         setOcrProgress(0);
-        const text = await extractTextFromFile(selectedFile, (p) => setOcrProgress(p));
+        const text = await extractTextFromFile(file, (p) => setOcrProgress(p));
         setOcrState("ai");
         extracted = await mapTextToFields(text, category, config.fields);
       }
@@ -90,6 +123,9 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
     setSaving(false);
   };
 
+  const dokumente = form.dokumente || [];
+  const latestFile = dokumente[0] || null;
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -103,59 +139,66 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
         <div className="scroll" style={{ flex: 1 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 24 }}>
 
+            {/* Dokumentenbereich */}
             <div>
-              <label>Dokument (PDF oder Foto)</label>
-              <div style={{ background: "var(--bg3)", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 16, textAlign: "center" }}>
-                {uploading && !form.dokument ? (
-                  <div style={{ fontSize: 13, color: "var(--text3)" }}>⏳ Dokument wird hochgeladen…</div>
-                ) : form.dokument ? (
-                  <div>
-                    <div style={{ color: "var(--green)", fontSize: 13, marginBottom: 8 }}>✅ Dokument hochgeladen</div>
-                    <a href={form.dokument} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", fontSize: 12 }}>Öffnen</a>
-                    <button className="btn-ghost" style={{ display: "block", margin: "8px auto 0", fontSize: 12 }}
-                      onClick={() => { setSelectedFile(null); setOcrState(null); handleChange("dokument", ""); }}>Entfernen</button>
+              <label>Dokumente</label>
+              <div style={{ background: "var(--bg3)", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 16 }}>
+                {uploading && (
+                  <div style={{ fontSize: 13, color: "var(--text3)", textAlign: "center", marginBottom: 8 }}>⏳ Wird hochgeladen…</div>
+                )}
 
-                    {isFromSmartUpload && filledFieldCount > 0 && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>
-                        ✓ {filledFieldCount} Felder von KI erkannt — bitte prüfen!
-                      </div>
-                    )}
-                    {isFromSmartUpload && filledFieldCount === 0 && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>
-                        KI konnte keine Felder erkennen — bitte manuell ausfüllen.
-                      </div>
-                    )}
-
-                    {!isFromSmartUpload && hasApiKey && selectedFile && ocrState !== "done" && (
-                      <button className="btn-secondary" onClick={handleExtract}
-                        disabled={ocrState === "ocr" || ocrState === "ai"}
-                        style={{ marginTop: 12, fontSize: 13, width: "100%" }}>
-                        {ocrState === "ocr" && `🔍 OCR läuft… ${ocrProgress}%`}
-                        {ocrState === "ai" && "🤖 KI analysiert…"}
-                        {(ocrState === null || ocrState === "error") && (isPDF(selectedFile) ? "🤖 PDF mit KI auslesen" : "🤖 Mit KI auslesen")}
-                      </button>
-                    )}
-                    {ocrState === "done" && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: "var(--green)" }}>
-                        ✓ {filledFieldCount} Felder befüllt — bitte prüfen!
-                      </div>
-                    )}
-                    {ocrState === "error" && <div style={{ marginTop: 8, fontSize: 12, color: "var(--red)" }}>❌ {ocrError}</div>}
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>📄</div>
-                    <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 12 }}>PDF oder Foto hochladen</div>
-                    <label style={{ display: "inline-block", background: "var(--surface2)", padding: "8px 16px", borderRadius: "var(--radius-sm)", cursor: "pointer", fontSize: 13, textTransform: "none", letterSpacing: 0, color: "var(--text)", fontWeight: 500, border: "1px solid var(--border)" }}>
-                      {uploading ? "Wird hochgeladen…" : "Datei auswählen"}
-                      <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
-                        onChange={(e) => e.target.files[0] && handleFileUpload(e.target.files[0])} />
-                    </label>
+                {isFromSmartUpload && !uploading && filledFieldCount > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
+                    ✓ {filledFieldCount} Felder von KI erkannt — bitte prüfen!
                   </div>
                 )}
+
+                {/* Dokumentenliste */}
+                {dokumente.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                    {dokumente.map((doc, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--bg2)", borderRadius: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</div>
+                          <div style={{ fontSize: 10, color: "var(--text3)" }}>
+                            {doc.typ}{doc.datum ? ` · ${doc.datum}` : ""}
+                            {i === 0 && <span style={{ color: "var(--green)", marginLeft: 6, fontWeight: 600 }}>● Aktuell</span>}
+                          </div>
+                        </div>
+                        <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)", flexShrink: 0 }}>Öffnen</a>
+                        <button className="btn-ghost" style={{ fontSize: 11, color: "var(--red)", padding: "2px 6px", flexShrink: 0 }} onClick={() => removeDoc(i)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* KI auslesen für aktuellstes Dokument */}
+                {!isFromSmartUpload && hasApiKey && latestFile && ocrState !== "done" && (
+                  <button className="btn-secondary" onClick={() => handleExtract(dokumente[0]?.file)}
+                    disabled={ocrState === "ocr" || ocrState === "ai"}
+                    style={{ fontSize: 13, width: "100%", marginBottom: 8 }}>
+                    {ocrState === "ocr" && `🔍 OCR läuft… ${ocrProgress}%`}
+                    {ocrState === "ai" && "🤖 KI analysiert…"}
+                    {(ocrState === null || ocrState === "error") && "🤖 Aktuelles Dokument mit KI auslesen"}
+                  </button>
+                )}
+                {ocrState === "done" && (
+                  <div style={{ fontSize: 12, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
+                    ✓ {filledFieldCount} Felder befüllt — bitte prüfen!
+                  </div>
+                )}
+                {ocrState === "error" && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>❌ {ocrError}</div>}
+
+                {/* Upload-Button */}
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "var(--surface2)", padding: "8px 16px", borderRadius: "var(--radius-sm)", cursor: "pointer", fontSize: 13, border: "1px solid var(--border)", color: "var(--text2)" }}>
+                  {uploading ? "⏳ Wird hochgeladen…" : dokumente.length > 0 ? "+ Weiteres Dokument" : "📄 Dokument auswählen"}
+                  <input type="file" accept=".pdf,image/*" style={{ display: "none" }} disabled={uploading}
+                    onChange={(e) => e.target.files[0] && handleFileUpload(e.target.files[0])} />
+                </label>
               </div>
             </div>
 
+            {/* Felder */}
             {config.fields.map((field) => {
               if (field === "typ") return (
                 <div key={field}>
@@ -183,22 +226,17 @@ export default function AddEntry({ category, entry, onSave, onClose, instance, a
                   <textarea rows={3} value={form[field] || ""} onChange={(e) => handleChange(field, e.target.value)}
                     placeholder="Zusätzliche Informationen..." style={{ resize: "none" }} /></div>
               );
-              const isBestandField = ["rueckkaufswert","monatsrenteJetzt","monatsrenteMit67","depotwert","kontostand"].includes(field);
+              const isBestandFirst = BESTAND_FIRST.includes(field);
               return (
                 <div key={field}>
-                  {isBestandField && field === "rueckkaufswert" && (
+                  {isBestandFirst && (
                     <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
-                      Bestand / Wert (optional)
+                      Bestand / Wert (optional — wird aus Dokumenten ausgelesen)
                     </div>
                   )}
-                  {isBestandField && field === "depotwert" && (
+                  {field === "monatsrenteJetzt" && (
                     <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
-                      Bestand / Wert (optional)
-                    </div>
-                  )}
-                  {isBestandField && field === "kontostand" && (
-                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>
-                      Bestand / Wert (optional)
+                      Rentenvorschau (aus Standmitteilung)
                     </div>
                   )}
                   <label style={{ color: form[field] ? "var(--accent)" : undefined }}>
