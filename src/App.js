@@ -297,7 +297,7 @@ export default function App() {
           category={addCategory}
           editEntry={editEntry}
           data={data}
-          token={accounts.length ? (() => getToken(instance, accounts))() : null}
+          getToken={accounts.length ? () => getToken(instance, accounts) : null}
           onSave={handleSaveEntry}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
         />

@@ -69,7 +69,7 @@ function Select({ value, onChange, options, placeholder }) {
   );
 }
 
-export default function AddEntry({ category: initCategory, editEntry, data, token, onSave, onClose }) {
+export default function AddEntry({ category: initCategory, editEntry, data, getToken, onSave, onClose }) {
   const defaultCat = initCategory || (editEntry ? findCategory(editEntry, data) : CATEGORIES[0].id);
   const [category, setCategory] = useState(defaultCat);
   const [fields, setFields] = useState(editEntry ? { ...editEntry } : {});
@@ -166,7 +166,8 @@ export default function AddEntry({ category: initCategory, editEntry, data, toke
     setUploading(true);
     try {
       let docUrl = fields.dokument;
-      if (file && token) {
+      if (file && getToken) {
+        const token = await getToken();
         const subfolder = fields.policennummer || fields.isin || fields.id || newId();
         docUrl = await uploadDocument(token, file, category, subfolder);
       }
