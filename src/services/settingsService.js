@@ -17,7 +17,3 @@ export function saveSettings(settings) {
 export function getFolderPath() {
   return getSettings().oneDriveFolderPath || DEFAULT_PATH;
 }
-
-export function getGeburtsjahr() {
-  return parseInt(getSettings().geburtsjahr) || null;
-}
