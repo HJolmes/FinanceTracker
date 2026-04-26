@@ -47,10 +47,6 @@ export async function getBalances(accountId) {
   return call("balances", { account_id: accountId });
 }
 
-export async function getTransactions(accountId) {
-  return call("transactions", { account_id: accountId });
-}
-
 // Gespeicherte Konten (localStorage)
 export function getConnectedAccounts() {
   try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]"); }
