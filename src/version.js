@@ -1,6 +1,31 @@
-export const APP_VERSION = "beta v0.013";
+export const APP_VERSION = "beta v0.014";
 
 export const APP_CHANGELOG = {
+  "beta v0.014": {
+    date: "26.04.2026",
+    entries: [
+      {
+        emoji: "🎯",
+        title: "Ticker-Suche via OpenFIGI (Bloomberg)",
+        desc: "ISIN-zu-Ticker wird jetzt über die OpenFIGI-API von Bloomberg aufgelöst – deutlich zuverlässiger als Yahoo Finance Search, kein CORS-Problem auf Mobilgeräten.",
+      },
+      {
+        emoji: "☁️",
+        title: "\"Aus OneDrive laden\" Button",
+        desc: "In den Einstellungen gibt es jetzt einen Button um Daten manuell aus OneDrive neu zu laden – wichtig nach Pfadänderungen oder App-Reset.",
+      },
+      {
+        emoji: "📍",
+        title: "Aktiver OneDrive-Pfad sichtbar",
+        desc: "Die Einstellungen zeigen jetzt den tatsächlich verwendeten Pfad an, damit Pfad-Fehler sofort erkannt werden können.",
+      },
+      {
+        emoji: "🔧",
+        title: "OneDrive Fallback verbessert",
+        desc: "Bei nicht gefundener Datei (404) wird jetzt zuerst der lokale Cache geprüft, statt sofort leere Daten zurückzugeben.",
+      },
+    ],
+  },
   "beta v0.013": {
     date: "25.04.2026",
     entries: [
@@ -22,17 +47,12 @@ export const APP_CHANGELOG = {
       {
         emoji: "🧠",
         title: "Ticker automatisch erkannt",
-        desc: "ISIN eingeben genügt – der Börsenticker wird automatisch über Yahoo Finance gesucht. Kein manuelles Eintippen mehr nötig.",
-      },
-      {
-        emoji: "🔍",
-        title: "Kursverlauf ohne Ticker",
-        desc: "ETF-Einträge ohne Ticker zeigen trotzdem den Kursverlauf – die App sucht den Ticker selbständig anhand von ISIN oder Name.",
+        desc: "ISIN eingeben genügt – der Börsenticker wird automatisch über Yahoo Finance gesucht.",
       },
       {
         emoji: "🔧",
         title: "\"Failed to fetch\" behoben",
-        desc: "Yahoo Finance API nutzt jetzt query2 als Fallback wenn query1 blockiert wird – Kursdaten laden zuverlässiger auf Mobilgeräten.",
+        desc: "Yahoo Finance API nutzt jetzt query2 als Fallback wenn query1 blockiert wird.",
       },
     ],
   },
@@ -42,68 +62,22 @@ export const APP_CHANGELOG = {
       {
         emoji: "📈",
         title: "Echte Kursverläufe für ETF & Spar Pläne",
-        desc: "ETF- und Fonds-Einträge zeigen jetzt den realen Kursverlauf direkt in der Karte – 1M, 3M, 6M, 1J oder 5J wählbar.",
+        desc: "ETF- und Fonds-Einträge zeigen den realen Kursverlauf – 1M, 3M, 6M, 1J, 5J wählbar.",
       },
       {
         emoji: "💰",
         title: "Depotwert live berechnet",
-        desc: "Trägst du deine Anteilszahl ein, berechnet die App den aktuellen Depotwert automatisch aus dem Yahoo Finance Kurs.",
-      },
-      {
-        emoji: "🏷️",
-        title: "Ticker-Feld für Spar Pläne",
-        desc: "Neues Feld 'Börsen-Ticker' und 'Anteile im Besitz' in Spar Plänen – unterstützt ETFs, Fonds und Aktienpläne.",
+        desc: "Anteilszahl eingeben → Depotwert wird automatisch aus dem aktuellen Kurs berechnet.",
       },
     ],
   },
   "beta v0.010": {
     date: "25.04.2026",
     entries: [
-      {
-        emoji: "🗑️",
-        title: "Dokumente einzeln löschen",
-        desc: "Falsch zugeordnete Dokumente können jetzt direkt aus der Policen-Karte entfernt werden, ohne den ganzen Eintrag zu bearbeiten.",
-      },
-      {
-        emoji: "🔄",
-        title: "Neu bewerten pro Dokument",
-        desc: "Neben jedem Dokument im Bearbeitungsformular gibt es jetzt einen ‘Neu bewerten’-Button: Datei auswählen und die KI liest alle Felder neu aus.",
-      },
-      {
-        emoji: "🧧",
-        title: "Bewirtungsbeleg: MwSt-Aufschlüsselung",
-        desc: "Speisen (7%) und Getränke (19%) werden als separate Nettobetrage erfasst und auf dem Beleg angezeigt.",
-      },
-      {
-        emoji: "✍️",
-        title: "Handschrift-Erkennung für Bewirtungsbelege",
-        desc: "Claude erkennt jetzt handschriftlich ergänzte Teilnehmer und den geschäftlichen Anlass direkt auf dem Foto des Belegs.",
-      },
-      {
-        emoji: "⚠️",
-        title: "Pflichtfeld-Warnung bei Bewirtung",
-        desc: "Fehlen Anlass oder Teilnehmer, erscheint ein Hinweis direkt auf dem Beleg – damit steuerl. Pflichtangaben nicht vergessen werden.",
-      },
-    ],
-  },
-  "beta v0.009": {
-    date: "25.04.2026",
-    entries: [
-      {
-        emoji: "📈",
-        title: "Renten-Spanne (pessimistisch – optimistisch)",
-        desc: "Bei Rentenversicherungen mit fondsgebundenen Anlagen zeigt die App jetzt eine Bandbreite: niedrigstes bis höchstes Szenario aus der Standmitteilung.",
-      },
-      {
-        emoji: "✅",
-        title: "Garantierte Rente aus Rentenbescheid",
-        desc: "Liegt ein konkreter Rentenbescheid vor, wird die garantierte Monatsrente separat ausgewiesen – unterschieden von Prognosen.",
-      },
-      {
-        emoji: "🔔",
-        title: "Update-Zusammenfassung (Was ist neu?)",
-        desc: "Nach jedem App-Update erscheint automatisch eine Übersicht der Änderungen. In den Einstellungen jederzeit erneut aufrufbar.",
-      },
+      { emoji: "🗑️", title: "Dokumente einzeln löschen", desc: "Falsch zugeordnete Dokumente direkt aus der Karte entfernen." },
+      { emoji: "🔄", title: "Neu bewerten pro Dokument", desc: "KI liest Felder aus einer neuen Datei neu aus." },
+      { emoji: "🧧", title: "Bewirtungsbeleg MwSt-Aufschlüsselung", desc: "Speisen (7%) und Getränke (19%) separat erfassen." },
+      { emoji: "⚠️", title: "Pflichtfeld-Warnung bei Bewirtung", desc: "Hinweis wenn Anlass oder Teilnehmer fehlen." },
     ],
   },
 };
