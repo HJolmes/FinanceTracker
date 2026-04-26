@@ -43,7 +43,6 @@ function extractFirstJSON(text) {
         try {
           return JSON.parse(text.slice(start, i + 1));
         } catch {
-          // reset and keep looking
           start = -1;
         }
       }
@@ -169,21 +168,6 @@ export async function detectDocumentType(file) {
   } catch {
     return "Sonstiges";
   }
-}
-
-export async function mapTextToFields(text, category, fields) {
-  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(",");
-  return callClaude(`${FIELDS_PROMPT(category, fieldList)}\n\nText:\n${text.slice(0, 2500)}`, 1024);
-}
-
-export async function mapPDFToFields(file, category, fields) {
-  if (file.size > MAX_PDF_MB * 1024 * 1024) throw new Error(`PDF zu gross (max ${MAX_PDF_MB} MB)`);
-  const base64 = await toBase64(file);
-  const fieldList = fields.filter((f) => !["dokument", "dokumente", "notiz"].includes(f)).join(",");
-  return callClaude([
-    { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-    { type: "text", text: FIELDS_PROMPT(category, fieldList) },
-  ], 1024);
 }
 
 export async function detectAndExtractFromText(text) {
