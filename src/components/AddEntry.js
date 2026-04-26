@@ -1,15 +1,15 @@
 import React, { useState, useRef } from "react";
-import { extractFromPDF, extractFromImage, buildDocumentName, hasApiKey } from "../services/claudeService";
+import { extractAndName, detectAndExtract, hasApiKey } from "../services/claudeService";
 import { lookupTicker } from "../services/marketDataService";
 import { uploadDocument } from "../services/oneDriveService";
 
 const CATEGORIES = [
-  { id: "einnahmen", label: "Einnahmen 💰" },
   { id: "versicherungen", label: "Versicherungen 🛡️" },
   { id: "sparplaene", label: "Sparpläne 📈" },
   { id: "leasing", label: "Leasing & Kredite 🚗" },
   { id: "bankkonten", label: "Bankkonten 🏦" },
   { id: "steuerbelege", label: "Steuerbelege 🧾" },
+  { id: "einnahmen", label: "Einnahmen 💰" },
 ];
 
 const INTERVALL_OPTS = ["monatlich", "quartalsweise", "halbjährlich", "jährlich", "einmalig"];
@@ -25,6 +25,13 @@ const TYP_OPTS = {
 
 function newId() {
   return Date.now().toString() + Math.random().toString(36).slice(2, 7);
+}
+
+function findCategory(entry, d) {
+  for (const cat of ["versicherungen", "sparplaene", "leasing", "bankkonten", "steuerbelege", "einnahmen"]) {
+    if ((d[cat] || []).find((e) => e.id === entry.id)) return cat;
+  }
+  return CATEGORIES[0].id;
 }
 
 function DocViewerModal({ file, url, onClose }) {
@@ -63,7 +70,8 @@ function Select({ value, onChange, options, placeholder }) {
 }
 
 export default function AddEntry({ category: initCategory, editEntry, data, token, onSave, onClose }) {
-  const [category, setCategory] = useState(initCategory || (editEntry ? detectCategory(editEntry, data) : ""));
+  const defaultCat = initCategory || (editEntry ? findCategory(editEntry, data) : CATEGORIES[0].id);
+  const [category, setCategory] = useState(defaultCat);
   const [fields, setFields] = useState(editEntry ? { ...editEntry } : {});
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -72,31 +80,43 @@ export default function AddEntry({ category: initCategory, editEntry, data, toke
   const [duplicateHint, setDuplicateHint] = useState(null);
   const [viewDoc, setViewDoc] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState(!editEntry && hasApiKey() ? "ki" : "manual");
+  const [autoDetect, setAutoDetect] = useState(false);
   const tickerTimer = useRef(null);
-
-  function detectCategory(entry, d) {
-    for (const cat of ["versicherungen", "sparplaene", "leasing", "bankkonten", "steuerbelege", "einnahmen"]) {
-      if ((d[cat] || []).find((e) => e.id === entry.id)) return cat;
-    }
-    return "";
-  }
 
   function set(key, val) {
     setFields((f) => ({ ...f, [key]: val }));
   }
 
-  async function handleFile(f) {
-    setFile(f);
-    setError("");
-    if (!category || category === "einnahmen" || !hasApiKey()) return;
+  function checkDuplicate(cat, f) {
+    if (!cat || !data) return;
+    const existing = data[cat] || [];
+    const matchField = cat === "versicherungen" ? "policennummer"
+      : cat === "sparplaene" ? "isin"
+      : cat === "bankkonten" ? "iban"
+      : null;
+    if (!matchField || !f[matchField]) return;
+    const match = existing.find((e) => e[matchField] && e[matchField] === f[matchField] && e.id !== fields.id);
+    setDuplicateHint(match || null);
+  }
+
+  async function runExtraction(f, cat) {
     setExtracting(true);
+    setError("");
     try {
-      const isPDF = f.type === "application/pdf" || f.name.endsWith(".pdf");
-      const extracted = isPDF ? await extractFromPDF(f, category) : await extractFromImage(f, category);
-      setFields((prev) => ({ ...prev, ...extracted }));
-      const docName = await buildDocumentName(f, category);
-      f.renamedName = docName;
-      checkDuplicate({ ...fields, ...extracted });
+      if (cat === null) {
+        const result = await detectAndExtract(f);
+        const detectedCat = result.category || category;
+        if (result.category) setCategory(result.category);
+        setFields((prev) => ({ ...prev, ...result.fields }));
+        if (result.documentName) f.renamedName = result.documentName;
+        checkDuplicate(detectedCat, result.fields);
+      } else {
+        const result = await extractAndName(f, cat);
+        setFields((prev) => ({ ...prev, ...result.fields }));
+        if (result.documentName) f.renamedName = result.documentName;
+        checkDuplicate(cat, result.fields);
+      }
     } catch (e) {
       setError(`KI-Extraktion fehlgeschlagen: ${e.message}`);
     } finally {
@@ -104,16 +124,21 @@ export default function AddEntry({ category: initCategory, editEntry, data, toke
     }
   }
 
-  function checkDuplicate(f) {
-    if (!category || !data) return;
-    const existing = data[category] || [];
-    const matchField = category === "versicherungen" ? "policennummer"
-      : category === "sparplaene" ? "isin"
-      : category === "bankkonten" ? "iban"
-      : null;
-    if (!matchField || !f[matchField]) return;
-    const match = existing.find((e) => e[matchField] && e[matchField] === f[matchField] && e.id !== fields.id);
-    setDuplicateHint(match || null);
+  async function handleFile(f) {
+    setFile(f);
+    setError("");
+    if (mode !== "ki" || category === "einnahmen" || !hasApiKey()) return;
+    runExtraction(f, autoDetect ? null : category);
+  }
+
+  function handleCategoryChange(newCat) {
+    if (newCat === category) return;
+    setCategory(newCat);
+    if (!editEntry) setFields({});
+    setDuplicateHint(null);
+    if (mode === "ki" && file && !autoDetect && newCat !== "einnahmen" && hasApiKey()) {
+      runExtraction(file, newCat);
+    }
   }
 
   function handleIsinChange(val) {
@@ -174,27 +199,8 @@ export default function AddEntry({ category: initCategory, editEntry, data, toke
   }
 
   const isBewirtung = category === "steuerbelege" && fields.kategorie === "Bewirtung";
-
-  if (!category) {
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <span className="modal-title">Kategorie wählen</span>
-            <button className="btn-ghost" onClick={onClose}>✕</button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {CATEGORIES.map((c) => (
-              <button key={c.id} className="btn-secondary" style={{ padding: 16, fontSize: 15 }}
-                onClick={() => setCategory(c.id)}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const showKiToggle = category !== "einnahmen";
+  const apiKey = hasApiKey();
 
   return (
     <>
@@ -202,28 +208,82 @@ export default function AddEntry({ category: initCategory, editEntry, data, toke
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-sheet" style={{ maxHeight: "95dvh" }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <span className="modal-title">{editEntry ? "Bearbeiten" : "Neuer Eintrag"} – {CATEGORIES.find((c) => c.id === category)?.label}</span>
+            <span className="modal-title">{editEntry ? "Bearbeiten" : "Neuer Eintrag"}</span>
             <button className="btn-ghost" onClick={onClose}>✕</button>
           </div>
 
-          {category !== "einnahmen" && (
-            <div style={{ marginBottom: 16 }}>
-              <label className="form-label">Dokument hochladen (optional)</label>
-              <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-                <input type="file" accept=".pdf,image/*" style={{ flex: 1, minWidth: 0 }}
-                  onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
-                {file && (
-                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setViewDoc(true)}>👁 Vorschau</button>
-                )}
-              </div>
-              {extracting && (
-                <div style={{ color: "var(--accent)", fontSize: 13, marginTop: 6 }}>🤖 KI liest Dokument…</div>
-              )}
-              {!hasApiKey() && (
-                <div style={{ color: "var(--text3)", fontSize: 12, marginTop: 4 }}>Kein API-Key → keine KI-Extraktion</div>
-              )}
+          {/* Category dropdown – always visible and changeable */}
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <label className="form-label">Kategorie</label>
+            <select value={category} onChange={(e) => handleCategoryChange(e.target.value)}>
+              {CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* KI / Manuell toggle */}
+          {showKiToggle && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <button
+                className={mode === "ki" ? "btn-primary" : "btn-secondary"}
+                style={{ flex: 1, padding: "8px 4px", fontSize: 13 }}
+                onClick={() => setMode("ki")}
+                disabled={!apiKey}
+                title={!apiKey ? "Bitte zuerst Claude API-Key in den Einstellungen hinterlegen" : undefined}
+              >
+                🤖 Mit KI ausfüllen
+              </button>
+              <button
+                className={mode === "manual" ? "btn-primary" : "btn-secondary"}
+                style={{ flex: 1, padding: "8px 4px", fontSize: 13 }}
+                onClick={() => setMode("manual")}
+              >
+                ✏️ Manuell
+              </button>
             </div>
           )}
+
+          {/* Auto-detect checkbox – only in KI mode */}
+          {mode === "ki" && showKiToggle && (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={autoDetect}
+                onChange={(e) => setAutoDetect(e.target.checked)}
+                style={{ width: "auto", accentColor: "var(--accent)" }}
+              />
+              Kategorie automatisch erkennen
+            </label>
+          )}
+
+          {/* File upload */}
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">
+              {mode === "ki" && showKiToggle ? "Dokument hochladen" : "Dokument hochladen (optional, empfohlen)"}
+            </label>
+            <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                style={{ flex: 1, minWidth: 0 }}
+                onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
+              />
+              {file && (
+                <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setViewDoc(true)}>
+                  👁 Vorschau
+                </button>
+              )}
+            </div>
+            {extracting && (
+              <div style={{ color: "var(--accent)", fontSize: 13, marginTop: 6 }}>🤖 KI liest Dokument…</div>
+            )}
+            {!apiKey && showKiToggle && (
+              <div style={{ color: "var(--text3)", fontSize: 12, marginTop: 4 }}>
+                Kein API-Key konfiguriert – bitte in Einstellungen hinterlegen
+              </div>
+            )}
+          </div>
 
           {duplicateHint && (
             <div className="alert alert-gold" style={{ marginBottom: 12, fontSize: 13 }}>
