@@ -20,13 +20,6 @@ import WhatsNew from "./components/WhatsNew";
 
 const SEEN_KEY = "financetracker_seen_version";
 
-const CATEGORY_TABS = {
-  versicherungen: { label: "Versicherungen 🛡️" },
-  sparplaene: { label: "Sparpläne 📈" },
-  leasing: { label: "Leasing & Kredite 🚗" },
-  bankkonten: { label: "Bankkonten 🏦" },
-};
-
 function getToken(instance, accounts) {
   return instance.acquireTokenSilent({ ...loginRequest, account: accounts[0] })
     .then((r) => r.accessToken)
@@ -62,7 +55,6 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [addCategory, setAddCategory] = useState("");
   const [editEntry, setEditEntry] = useState(null);
-  const [editCategory, setEditCategory] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
@@ -146,13 +138,11 @@ export default function App() {
   function openAdd(category) {
     setAddCategory(category || "");
     setEditEntry(null);
-    setEditCategory("");
     setShowAdd(true);
   }
 
   function openEdit(entry, category) {
     setEditEntry(entry);
-    setEditCategory(category);
     setAddCategory(category);
     setShowAdd(true);
   }
@@ -183,7 +173,6 @@ export default function App() {
   }
 
   const settings = loadSettings();
-  const token = accounts.length ? null : null;
 
   function renderContent() {
     if (showSettings) {

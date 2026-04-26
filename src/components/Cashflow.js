@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const toMonthly = (betrag, intervall) => {
   const b = parseFloat(betrag) || 0;
