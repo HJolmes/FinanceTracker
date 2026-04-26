@@ -3,6 +3,7 @@ import React from "react";
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: "🏠" },
   { id: "cashflow", label: "Cashflow", icon: "💶" },
+  { id: "ausgaben", label: "Ausgaben", icon: "💸" },
   { id: "versicherungen", label: "Versicherungen", icon: "🛡️" },
   { id: "sparplaene", label: "Sparpläne", icon: "📈" },
   { id: "leasing", label: "Leasing", icon: "🚗" },

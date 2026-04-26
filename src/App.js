@@ -3,7 +3,7 @@ import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "./services/authConfig";
 import { loadData, saveData, forceReloadData } from "./services/oneDriveService";
 import { loadSettings } from "./services/settingsService";
-import { checkFaelligkeiten } from "./services/notificationService";
+import { checkFaelligkeiten, checkKuendigungsfristen } from "./services/notificationService";
 import { APP_VERSION } from "./version";
 
 import NavBar from "./components/NavBar";
@@ -17,6 +17,7 @@ import Kalender from "./components/Kalender";
 import Suche from "./components/Suche";
 import Settings from "./components/Settings";
 import WhatsNew from "./components/WhatsNew";
+import KuendigungsModal from "./components/KuendigungsModal";
 
 const SEEN_KEY = "financetracker_seen_version";
 
@@ -59,6 +60,11 @@ export default function App() {
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   const [faelligkeitenWarnungen, setFaelligkeitenWarnungen] = useState([]);
+  const [kuendigungsWarnungen, setKuendigungsWarnungen] = useState([]);
+  const [kuendigungsBannerDismissed, setKuendigungsBannerDismissed] = useState(
+    () => localStorage.getItem("kuendigung_banner_seen") === new Date().toISOString().slice(0, 10)
+  );
+  const [kuendigungsEntry, setKuendigungsEntry] = useState(null);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
   useEffect(() => {
@@ -80,6 +86,7 @@ export default function App() {
       const withSnapshot = snapshotVermoegenIfNeeded(raw);
       setData(withSnapshot);
       setFaelligkeitenWarnungen(checkFaelligkeiten(withSnapshot));
+      setKuendigungsWarnungen(checkKuendigungsfristen(withSnapshot));
       if (withSnapshot !== raw) {
         await saveData(token, withSnapshot);
       }
@@ -190,6 +197,7 @@ export default function App() {
         return <Dashboard data={data} onAddEntry={openAdd} onTabChange={setActiveTab} faelligkeitenWarnungen={faelligkeitenWarnungen} geburtsjahr={settings.geburtsjahr} />;
       case "cashflow":
         return <Cashflow data={data} onAddEntry={openAdd} onEditEntry={(e) => openEdit(e, "einnahmen")} />;
+      case "ausgaben":
       case "versicherungen":
       case "sparplaene":
       case "leasing":
@@ -201,6 +209,7 @@ export default function App() {
             onEdit={(e) => openEdit(e, activeTab)}
             onDelete={(id) => handleDeleteEntry(activeTab, id)}
             onTasksChange={(id, tasks) => handleTasksChange(activeTab, id, tasks)}
+            onKuendigen={(e) => setKuendigungsEntry({ entry: e, category: activeTab })}
           />
         );
       case "steuerbelege":
@@ -223,6 +232,7 @@ export default function App() {
   const pageTitle = showSettings ? "⚙️ Einstellungen"
     : activeTab === "dashboard" ? "🏠 Dashboard"
     : activeTab === "cashflow" ? "💶 Cashflow"
+    : activeTab === "ausgaben" ? "💸 Ausgaben"
     : activeTab === "versicherungen" ? "🛡️ Versicherungen"
     : activeTab === "sparplaene" ? "📈 Sparpläne"
     : activeTab === "leasing" ? "🚗 Leasing & Kredite"
@@ -232,7 +242,7 @@ export default function App() {
     : activeTab === "suche" ? "🔍 Suche"
     : "";
 
-  const showFab = !showSettings && ["versicherungen", "sparplaene", "leasing", "bankkonten", "steuerbelege", "cashflow", "dashboard"].includes(activeTab);
+  const showFab = !showSettings && ["versicherungen", "sparplaene", "leasing", "bankkonten", "steuerbelege", "cashflow", "dashboard", "ausgaben"].includes(activeTab);
 
   return (
     <div className="app-layout">
@@ -304,6 +314,31 @@ export default function App() {
       )}
 
       {showWhatsNew && <WhatsNew onClose={() => setShowWhatsNew(false)} />}
+
+      {kuendigungsEntry && (
+        <KuendigungsModal
+          entry={kuendigungsEntry.entry}
+          category={kuendigungsEntry.category}
+          onClose={() => setKuendigungsEntry(null)}
+        />
+      )}
+
+      {!kuendigungsBannerDismissed && kuendigungsWarnungen.length > 0 && (
+        <div className="alert alert-red" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, borderRadius: 0, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <strong>🔔 Kündigungsfristen laufen bald ab:</strong>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 16 }}>
+              {kuendigungsWarnungen.map((w, i) => (
+                <li key={i}>{w.entry.name || w.entry.anbieter} – Frist: {w.kuendigungsfrist} ({w.diffDays} Tage)</li>
+              ))}
+            </ul>
+          </div>
+          <button className="btn-ghost" style={{ color: "#0f1923", fontWeight: 700, flexShrink: 0 }} onClick={() => {
+            localStorage.setItem("kuendigung_banner_seen", new Date().toISOString().slice(0, 10));
+            setKuendigungsBannerDismissed(true);
+          }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }

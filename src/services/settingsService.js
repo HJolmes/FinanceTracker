@@ -3,6 +3,9 @@ const SETTINGS_KEY = "financetracker_settings";
 const defaults = {
   oneDriveFolderPath: "FinanceTracker",
   geburtsjahr: "",
+  steuerklasse: "1",
+  kirchensteuer: false,
+  kinderlos: false,
 };
 
 export function loadSettings() {

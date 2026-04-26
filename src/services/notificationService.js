@@ -22,3 +22,22 @@ export function checkFaelligkeiten(data) {
 
   return warnungen;
 }
+
+export function checkKuendigungsfristen(data) {
+  const today = new Date();
+  const warnungen = [];
+  const cats = ["versicherungen", "leasing", "ausgaben"];
+
+  for (const cat of cats) {
+    (data[cat] || []).forEach((entry) => {
+      if (!entry.kuendigungswecker || !entry.kuendigungsfrist) return;
+      const frist = new Date(entry.kuendigungsfrist);
+      const diffDays = Math.floor((frist - today) / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays <= 30) {
+        warnungen.push({ entry, cat, kuendigungsfrist: entry.kuendigungsfrist, diffDays });
+      }
+    });
+  }
+
+  return warnungen;
+}

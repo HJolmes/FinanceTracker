@@ -93,6 +93,35 @@ export default function Settings({ data, onForceReload, onDataMerge, onShowWhats
       </div>
 
       <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 12 }}>💶 Gehaltsprofil</div>
+        <div className="form-group">
+          <label className="form-label">Steuerklasse (Vorausfüllung)</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["1","2","3","4","5","6"].map((sk) => (
+              <button
+                key={sk}
+                className={settings.steuerklasse === sk ? "btn-primary" : "btn-secondary"}
+                style={{ width: 40, padding: "6px 0", fontWeight: 600 }}
+                onClick={() => update("steuerklasse", sk)}
+              >
+                {sk}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 20, marginTop: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
+            <input type="checkbox" checked={Boolean(settings.kirchensteuer)} onChange={(e) => update("kirchensteuer", e.target.checked)} style={{ width: "auto", accentColor: "var(--accent)" }} />
+            Kirchensteuer
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
+            <input type="checkbox" checked={Boolean(settings.kinderlos)} onChange={(e) => update("kinderlos", e.target.checked)} style={{ width: "auto", accentColor: "var(--accent)" }} />
+            Kinderlos (+PV)
+          </label>
+        </div>
+      </div>
+
+      <div className="card">
         <div style={{ fontWeight: 600, marginBottom: 12 }}>🤖 Claude AI</div>
         <div className="form-group">
           <label className="form-label">API-Key (nur lokal gespeichert)</label>

@@ -2,6 +2,8 @@ import React, { useState, useRef } from "react";
 import { extractAndName, detectAndExtract, hasApiKey } from "../services/claudeService";
 import { lookupTicker } from "../services/marketDataService";
 import { uploadDocument } from "../services/oneDriveService";
+import { loadSettings } from "../services/settingsService";
+import { calculateNet } from "../services/salaryService";
 
 const CATEGORIES = [
   { id: "versicherungen", label: "Versicherungen 🛡️" },
@@ -10,6 +12,7 @@ const CATEGORIES = [
   { id: "bankkonten", label: "Bankkonten 🏦" },
   { id: "steuerbelege", label: "Steuerbelege 🧾" },
   { id: "einnahmen", label: "Einnahmen 💰" },
+  { id: "ausgaben", label: "Ausgaben 💸" },
 ];
 
 const INTERVALL_OPTS = ["monatlich", "quartalsweise", "halbjährlich", "jährlich", "einmalig"];
@@ -21,6 +24,7 @@ const TYP_OPTS = {
   bankkonten: ["Girokonto", "Tagesgeld", "Festgeld", "Depot", "Gemeinschaftskonto", "Sonstiges"],
   steuerbelege: ["Bewirtung", "Fahrtkosten", "Arbeitsmittel", "Fortbildung", "Bürobedarf", "Sonstiges"],
   einnahmen: ["Gehalt", "Mieteinnahmen", "Nebeneinkommen", "Rente", "Sonstiges"],
+  ausgaben: ["Miete", "Strom", "Internet", "Handy", "Streaming", "Software", "Verein", "Versicherung", "Sonstiges"],
 };
 
 function newId() {
@@ -295,6 +299,7 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
           {error && <div className="alert alert-red" style={{ marginBottom: 12 }}>{error}</div>}
 
           {category === "einnahmen" && <EinnahmenFields fields={fields} set={set} />}
+          {category === "ausgaben" && <AusgabenFields fields={fields} set={set} />}
           {category === "versicherungen" && <VersicherungFields fields={fields} set={set} />}
           {category === "sparplaene" && <SparplanFields fields={fields} set={set} onIsinChange={handleIsinChange} tickerStatus={tickerStatus} />}
           {category === "leasing" && <LeasingFields fields={fields} set={set} />}
@@ -342,14 +347,176 @@ function TaskListInline({ tasks, onChange }) {
   );
 }
 
+function fmtEur(n) {
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n || 0);
+}
+
+function KuendigungsweckerSection({ fields, set }) {
+  return (
+    <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg2)", borderRadius: 8, border: "1px solid var(--border)" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={Boolean(fields.kuendigungswecker)}
+          onChange={(e) => { set("kuendigungswecker", e.target.checked); if (!e.target.checked) set("kuendigungsfrist", ""); }}
+          style={{ width: "auto", accentColor: "var(--accent)" }}
+        />
+        <span style={{ fontWeight: 500, fontSize: 14 }}>🔔 Kündigungswecker</span>
+      </label>
+      {fields.kuendigungswecker && (
+        <div style={{ marginTop: 8 }}>
+          <FieldGroup label="Kündigungsfrist">
+            <input type="date" value={fields.kuendigungsfrist || ""} onChange={(e) => set("kuendigungsfrist", e.target.value)} />
+          </FieldGroup>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EinnahmenFields({ fields, set }) {
+  const settings = loadSettings();
+  const [showDetail, setShowDetail] = useState(false);
+  const methode = fields.eingabemethode || (fields.bruttoGehalt ? "brutto" : "netto");
+
+  function doCalc(override = {}) {
+    const result = calculateNet({
+      brutto: parseFloat(override.bruttoGehalt ?? fields.bruttoGehalt) || 0,
+      steuerklasse: parseInt(override.steuerklasse ?? fields.steuerklasse ?? settings.steuerklasse) || 1,
+      kirchensteuer: override.kirchensteuer ?? fields.kirchensteuer ?? settings.kirchensteuer ?? false,
+      bav: parseFloat(override.bav ?? fields.bav) || 0,
+      sachbezug: parseFloat(override.sachbezug ?? fields.sachbezug) || 0,
+      kinderlos: override.kinderlos ?? fields.kinderlos ?? settings.kinderlos ?? false,
+    });
+    if (result) set("betrag", result.netto.toString());
+  }
+
+  function switchMethode(m) {
+    set("eingabemethode", m);
+    if (m === "brutto") {
+      if (!fields.steuerklasse) set("steuerklasse", settings.steuerklasse || "1");
+      if (fields.kirchensteuer === undefined) set("kirchensteuer", settings.kirchensteuer || false);
+      if (fields.kinderlos === undefined) set("kinderlos", settings.kinderlos || false);
+      if (fields.bruttoGehalt) doCalc({});
+    }
+  }
+
+  const sk = fields.steuerklasse || settings.steuerklasse || "1";
+  const berechnet = methode === "brutto" && fields.bruttoGehalt ? calculateNet({
+    brutto: parseFloat(fields.bruttoGehalt) || 0,
+    steuerklasse: parseInt(sk) || 1,
+    kirchensteuer: fields.kirchensteuer ?? settings.kirchensteuer ?? false,
+    bav: parseFloat(fields.bav) || 0,
+    sachbezug: parseFloat(fields.sachbezug) || 0,
+    kinderlos: fields.kinderlos ?? settings.kinderlos ?? false,
+  }) : null;
+
   return <>
-    <FieldGroup label="Name" required><input value={fields.name || ""} onChange={(e) => set("name", e.target.value)} placeholder="z.B. Gehalt" /></FieldGroup>
+    <FieldGroup label="Name" required>
+      <input value={fields.name || ""} onChange={(e) => set("name", e.target.value)} placeholder="z.B. Gehalt" />
+    </FieldGroup>
+
+    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <button className={methode === "netto" ? "btn-primary" : "btn-secondary"} style={{ flex: 1, fontSize: 13, padding: "7px 4px" }} onClick={() => switchMethode("netto")}>
+        💶 Netto direkt
+      </button>
+      <button className={methode === "brutto" ? "btn-primary" : "btn-secondary"} style={{ flex: 1, fontSize: 13, padding: "7px 4px" }} onClick={() => switchMethode("brutto")}>
+        🧮 Brutto berechnen
+      </button>
+    </div>
+
+    {methode === "brutto" && <>
+      <FieldGroup label="Bruttogehalt (€)" required>
+        <input type="number" value={fields.bruttoGehalt || ""} onChange={(e) => { set("bruttoGehalt", e.target.value); doCalc({ bruttoGehalt: e.target.value }); }} placeholder="z.B. 4500" />
+      </FieldGroup>
+
+      <FieldGroup label="Steuerklasse">
+        <div style={{ display: "flex", gap: 6 }}>
+          {["1","2","3","4","5","6"].map((s) => (
+            <button key={s} className={sk === s ? "btn-primary" : "btn-secondary"} style={{ flex: 1, padding: "6px 0", fontWeight: 600 }}
+              onClick={() => { set("steuerklasse", s); doCalc({ steuerklasse: parseInt(s) }); }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </FieldGroup>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 14 }}>
+          <input type="checkbox" checked={Boolean(fields.kirchensteuer ?? settings.kirchensteuer)}
+            onChange={(e) => { set("kirchensteuer", e.target.checked); doCalc({ kirchensteuer: e.target.checked }); }}
+            style={{ width: "auto", accentColor: "var(--accent)" }} />
+          Kirchensteuer
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 14 }}>
+          <input type="checkbox" checked={Boolean(fields.kinderlos ?? settings.kinderlos)}
+            onChange={(e) => { set("kinderlos", e.target.checked); doCalc({ kinderlos: e.target.checked }); }}
+            style={{ width: "auto", accentColor: "var(--accent)" }} />
+          Kinderlos (+PV)
+        </label>
+      </div>
+
+      <div className="form-row">
+        <FieldGroup label="bAV (€/Monat)">
+          <input type="number" value={fields.bav || ""} onChange={(e) => { set("bav", e.target.value); doCalc({ bav: e.target.value }); }} placeholder="0" />
+        </FieldGroup>
+        <FieldGroup label="Sachbezug/GWV (€/Monat)">
+          <input type="number" value={fields.sachbezug || ""} onChange={(e) => { set("sachbezug", e.target.value); doCalc({ sachbezug: e.target.value }); }} placeholder="0" />
+        </FieldGroup>
+      </div>
+
+      {berechnet && (
+        <div style={{ background: "var(--bg2)", borderRadius: 8, padding: "10px 12px", marginBottom: 12, border: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 600 }}>Netto ≈ {fmtEur(berechnet.netto)}</span>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowDetail(!showDetail)}>
+              {showDetail ? "▲ weniger" : "▼ Aufschlüsselung"}
+            </button>
+          </div>
+          {showDetail && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--text2)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px" }}>
+              <span>Rentenversicherung</span><span>{fmtEur(berechnet.aufschluesselung.rv)}</span>
+              <span>Krankenversicherung</span><span>{fmtEur(berechnet.aufschluesselung.kv)}</span>
+              <span>Arbeitslosenversicherung</span><span>{fmtEur(berechnet.aufschluesselung.av)}</span>
+              <span>Pflegeversicherung</span><span>{fmtEur(berechnet.aufschluesselung.pv)}</span>
+              <span>Lohnsteuer</span><span>{fmtEur(berechnet.aufschluesselung.lohnsteuer)}</span>
+              <span>Solidaritätszuschlag</span><span>{fmtEur(berechnet.aufschluesselung.soli)}</span>
+              {berechnet.aufschluesselung.kirchensteuer > 0 && <><span>Kirchensteuer</span><span>{fmtEur(berechnet.aufschluesselung.kirchensteuer)}</span></>}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6 }}>Näherungswert · Stand 2024/25 · kein steuerrechtlicher Rat</div>
+        </div>
+      )}
+    </>}
+
+    <div className="form-row">
+      <FieldGroup label="Netto (€)" required>
+        <input type="number" value={fields.betrag || ""} onChange={(e) => set("betrag", e.target.value)}
+          placeholder={methode === "brutto" ? "🔄 berechnet" : ""} />
+      </FieldGroup>
+      <FieldGroup label="Intervall"><Select value={fields.intervall} onChange={(v) => set("intervall", v)} options={INTERVALL_OPTS} placeholder="Wählen…" /></FieldGroup>
+    </div>
+    <FieldGroup label="Kategorie"><Select value={fields.kategorie} onChange={(v) => set("kategorie", v)} options={TYP_OPTS.einnahmen} placeholder="Wählen…" /></FieldGroup>
+    <FieldGroup label="Notiz"><textarea rows={2} value={fields.notiz || ""} onChange={(e) => set("notiz", e.target.value)} /></FieldGroup>
+  </>;
+}
+
+function AusgabenFields({ fields, set }) {
+  return <>
+    <div className="form-row">
+      <FieldGroup label="Name" required><input value={fields.name || ""} onChange={(e) => set("name", e.target.value)} placeholder="z.B. Spotify" /></FieldGroup>
+      <FieldGroup label="Anbieter"><input value={fields.anbieter || ""} onChange={(e) => set("anbieter", e.target.value)} /></FieldGroup>
+    </div>
+    <div className="form-row">
+      <FieldGroup label="Typ"><Select value={fields.typ} onChange={(v) => set("typ", v)} options={TYP_OPTS.ausgaben} placeholder="Wählen…" /></FieldGroup>
+      <FieldGroup label="E-Mail (Kontakt)"><input type="email" value={fields.email || ""} onChange={(e) => set("email", e.target.value)} placeholder="kuendigung@…" /></FieldGroup>
+    </div>
     <div className="form-row">
       <FieldGroup label="Betrag (€)" required><input type="number" value={fields.betrag || ""} onChange={(e) => set("betrag", e.target.value)} /></FieldGroup>
       <FieldGroup label="Intervall"><Select value={fields.intervall} onChange={(v) => set("intervall", v)} options={INTERVALL_OPTS} placeholder="Wählen…" /></FieldGroup>
     </div>
-    <FieldGroup label="Kategorie"><Select value={fields.kategorie} onChange={(v) => set("kategorie", v)} options={TYP_OPTS.einnahmen} placeholder="Wählen…" /></FieldGroup>
+    <FieldGroup label="Fälligkeit / nächste Abbuchung"><input type="date" value={fields.faelligkeit || ""} onChange={(e) => set("faelligkeit", e.target.value)} /></FieldGroup>
+    <KuendigungsweckerSection fields={fields} set={set} />
     <FieldGroup label="Notiz"><textarea rows={2} value={fields.notiz || ""} onChange={(e) => set("notiz", e.target.value)} /></FieldGroup>
   </>;
 }
@@ -380,6 +547,7 @@ function VersicherungFields({ fields, set }) {
       <FieldGroup label="Rente mit 67 (hoch, €)"><input type="number" value={fields.renteMit67Hoch || ""} onChange={(e) => set("renteMit67Hoch", e.target.value)} /></FieldGroup>
       <FieldGroup label="Rente garantiert (€)"><input type="number" value={fields.renteGarantiert || ""} onChange={(e) => set("renteGarantiert", e.target.value)} /></FieldGroup>
     </div>
+    <KuendigungsweckerSection fields={fields} set={set} />
     <FieldGroup label="Notiz"><textarea rows={2} value={fields.notiz || ""} onChange={(e) => set("notiz", e.target.value)} /></FieldGroup>
   </>;
 }
@@ -431,6 +599,7 @@ function LeasingFields({ fields, set }) {
       <FieldGroup label="Restwert (€)"><input type="number" value={fields.restwert || ""} onChange={(e) => set("restwert", e.target.value)} /></FieldGroup>
       <FieldGroup label="Fälligkeit"><input type="date" value={fields.faelligkeit || ""} onChange={(e) => set("faelligkeit", e.target.value)} /></FieldGroup>
     </div>
+    <KuendigungsweckerSection fields={fields} set={set} />
     <FieldGroup label="Notiz"><textarea rows={2} value={fields.notiz || ""} onChange={(e) => set("notiz", e.target.value)} /></FieldGroup>
   </>;
 }

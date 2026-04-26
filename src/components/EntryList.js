@@ -67,7 +67,10 @@ const CATEGORY_LABELS = {
   bankkonten: "Bankkonten",
   steuerbelege: "Steuerbelege",
   einnahmen: "Einnahmen",
+  ausgaben: "Ausgaben",
 };
+
+const KUENDIGUNG_CATS = new Set(["versicherungen", "leasing", "ausgaben"]);
 
 function mainValue(entry, category) {
   if (category === "bankkonten") return entry.kontostand;
@@ -82,7 +85,7 @@ function fmt(n) {
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(parseFloat(n) || 0);
 }
 
-function EntryCard({ entry, category, onEdit, onDelete, onTasksChange }) {
+function EntryCard({ entry, category, onEdit, onDelete, onTasksChange, onKuendigen }) {
   const [expanded, setExpanded] = useState(false);
   const [viewDoc, setViewDoc] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -107,6 +110,11 @@ function EntryCard({ entry, category, onEdit, onDelete, onTasksChange }) {
             <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
               {entry.name || entry.beschreibung || "–"}
               {openTasks > 0 && <span className="badge">{openTasks}</span>}
+              {entry.kuendigungswecker && entry.kuendigungsfrist && (() => {
+                const days = Math.floor((new Date(entry.kuendigungsfrist) - new Date()) / 86400000);
+                const color = days <= 7 ? "var(--red)" : days <= 30 ? "var(--accent)" : "var(--text3)";
+                return <span style={{ fontSize: 11, color, fontWeight: 600, marginLeft: 4 }}>🔔 {days}T</span>;
+              })()}
             </div>
             <div style={{ color: "var(--text2)", fontSize: 13 }}>
               {entry.typ || entry.kategorie || ""}{val ? ` · ${fmt(val)}` : ""}
@@ -147,8 +155,11 @@ function EntryCard({ entry, category, onEdit, onDelete, onTasksChange }) {
 
             <TaskList tasks={tasks} onChange={(t) => onTasksChange(entry.id, t)} />
 
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
               <button className="btn-secondary" style={{ flex: 1 }} onClick={() => onEdit(entry)}>✏️ Bearbeiten</button>
+              {KUENDIGUNG_CATS.has(category) && onKuendigen && (
+                <button className="btn-danger" style={{ flex: 1 }} onClick={() => onKuendigen(entry)}>🔴 Kündigen</button>
+              )}
               {confirmDel
                 ? <>
                     <button className="btn-danger" style={{ flex: 1 }} onClick={() => onDelete(entry.id)}>Wirklich löschen?</button>
@@ -164,7 +175,7 @@ function EntryCard({ entry, category, onEdit, onDelete, onTasksChange }) {
   );
 }
 
-export default function EntryList({ category, entries, onEdit, onDelete, onTasksChange }) {
+export default function EntryList({ category, entries, onEdit, onDelete, onTasksChange, onKuendigen }) {
   if (!entries || entries.length === 0) {
     return (
       <div style={{ color: "var(--text3)", textAlign: "center", padding: "40px 20px" }}>
@@ -183,6 +194,7 @@ export default function EntryList({ category, entries, onEdit, onDelete, onTasks
           onEdit={onEdit}
           onDelete={onDelete}
           onTasksChange={onTasksChange}
+          onKuendigen={onKuendigen}
         />
       ))}
     </div>

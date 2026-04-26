@@ -18,8 +18,10 @@ function fmt(n) {
 
 export default function Dashboard({ data, onAddEntry, onTabChange, faelligkeitenWarnungen, geburtsjahr }) {
   const einnahmen = (data.einnahmen || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0);
-  const ausgaben = [...(data.versicherungen || []), ...(data.leasing || []), ...(data.sparplaene || [])]
-    .reduce((s, e) => s + toMonthly(e.beitrag ?? e.rate, e.intervall), 0);
+  const ausgabenRegelmaessig = (data.ausgaben || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0);
+  const ausgaben = ausgabenRegelmaessig +
+    [...(data.versicherungen || []), ...(data.leasing || []), ...(data.sparplaene || [])]
+      .reduce((s, e) => s + toMonthly(e.beitrag ?? e.rate, e.intervall), 0);
   const saldo = einnahmen - ausgaben;
 
   const bankGuthaben = (data.bankkonten || []).reduce((s, e) => s + (parseFloat(e.kontostand) || 0), 0);
@@ -28,6 +30,7 @@ export default function Dashboard({ data, onAddEntry, onTabChange, faelligkeiten
   const gesamtVermoegen = bankGuthaben + depotwert + rueckkauf;
 
   const categoryAusgaben = [
+    { name: "Ausgaben", value: (data.ausgaben || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0) },
     { name: "Versicherungen", value: (data.versicherungen || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0) },
     { name: "Leasing/Kredite", value: (data.leasing || []).reduce((s, e) => s + toMonthly(e.rate, e.intervall), 0) },
     { name: "Sparpläne", value: (data.sparplaene || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0) },

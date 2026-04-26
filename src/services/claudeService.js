@@ -66,8 +66,32 @@ function categoryFieldsPrompt(category) {
       "name, bank, typ, iban, kontonummer, kontostand, notiz",
     steuerbelege:
       "datum (YYYY-MM-DD), betrag, mwst, netto7, netto19, kategorie, beschreibung, partner",
+    einnahmen:
+      "name, betrag (Nettobetrag), bruttoGehalt, steuerklasse (Zahl 1–6), lohnsteuer, bav (bAV-Beitrag €/Monat), sachbezug (geldwerter Vorteil €/Monat), kirchensteuer (true/false), kinderlos (true/false), intervall, kategorie",
+    ausgaben:
+      "name, anbieter, typ, betrag, intervall, faelligkeit (YYYY-MM-DD), email (Kontakt-E-Mail), notiz",
   };
   return fields[category] || "name, betrag, notiz";
+}
+
+export async function generateKuendigungsschreiben(entry, category) {
+  const details = JSON.stringify(entry, null, 2);
+  const prompt =
+    `Du bist ein deutscher Rechtsassistent. Erstelle ein rechtssicheres Kündigungsschreiben für folgenden Vertrag:\n\n${details}\n\n` +
+    `Antworte NUR mit folgendem JSON:\n` +
+    `{\n` +
+    `  "brief": "vollständiger Brieftext mit Betreff, Anrede, Kündigung, Bitte um Bestätigung, Grüße",\n` +
+    `  "email": "kuendigung@anbieter.de oder null wenn keine E-Mail-Kündigung möglich",\n` +
+    `  "anleitung": ["Schritt 1: ...", "Schritt 2: ..."] oder null wenn E-Mail ausreicht\n` +
+    `}\n\n` +
+    `Hinweise:\n` +
+    `- Nutze bekannte Kündigungs-E-Mail-Adressen großer Anbieter (z.B. Spotify, Netflix, Fitnessstudios, Telekommunikation)\n` +
+    `- Wenn der Anbieter keine E-Mail-Kündigung akzeptiert, setze email auf null und gib eine Schritt-für-Schritt-Anleitung\n` +
+    `- Der Brief soll professionell, höflich und rechtlich korrekt sein\n` +
+    `- Füge "fristgerecht" und "zum nächstmöglichen Termin" ein\n` +
+    `- NUR JSON zurückgeben, keine Erklärungen außerhalb des JSON`;
+  const text = await callClaude([{ role: "user", content: [{ type: "text", text: prompt }] }], 2048);
+  return parseFirstJson(text);
 }
 
 function buildFileContent(file, base64) {

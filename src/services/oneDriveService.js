@@ -9,6 +9,7 @@ const DEFAULT_DATA = {
   bankkonten: [],
   steuerbelege: [],
   einnahmen: [],
+  ausgaben: [],
   vermoegensVerlauf: [],
   lastUpdated: new Date().toISOString(),
 };

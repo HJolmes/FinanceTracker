@@ -32,10 +32,11 @@ function CollapsibleGroup({ title, items, renderItem }) {
 
 export default function Cashflow({ data, onAddEntry, onEditEntry }) {
   const einnahmenTotal = (data.einnahmen || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0);
+  const ausgabenRegel = (data.ausgaben || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0);
   const ausgabenVers = (data.versicherungen || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0);
   const ausgabenLeas = (data.leasing || []).reduce((s, e) => s + toMonthly(e.rate, e.intervall), 0);
   const ausgabenSpar = (data.sparplaene || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0);
-  const ausgabenTotal = ausgabenVers + ausgabenLeas + ausgabenSpar;
+  const ausgabenTotal = ausgabenRegel + ausgabenVers + ausgabenLeas + ausgabenSpar;
   const saldo = einnahmenTotal - ausgabenTotal;
 
   return (
@@ -50,7 +51,7 @@ export default function Cashflow({ data, onAddEntry, onEditEntry }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--red)", marginTop: 4 }}>{fmt(ausgabenTotal)}</div>
         </div>
         <div className="card">
-          <div style={{ color: "var(--text2)", fontSize: 12 }}>Saldo/Monat</div>
+          <div style={{ color: "var(--text2)", fontSize: 12 }}>Verfügbar/Monat</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: saldo >= 0 ? "var(--green)" : "var(--red)", marginTop: 4 }}>{fmt(saldo)}</div>
         </div>
       </div>
@@ -78,7 +79,22 @@ export default function Cashflow({ data, onAddEntry, onEditEntry }) {
       </div>
 
       <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Ausgaben</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontWeight: 600 }}>Ausgaben</span>
+          <button className="btn-secondary" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => onAddEntry("ausgaben")}>+ Ausgabe</button>
+        </div>
+        {(data.ausgaben || []).length > 0 && (
+          <CollapsibleGroup
+            title={`Regelmäßige Ausgaben · ${fmt(ausgabenRegel)}/Mo`}
+            items={data.ausgaben || []}
+            renderItem={(e) => (
+              <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                <span>{e.name}{e.typ ? ` · ${e.typ}` : ""}</span>
+                <span style={{ color: "var(--text2)" }}>{fmt(toMonthly(e.betrag, e.intervall))}/Mo</span>
+              </div>
+            )}
+          />
+        )}
         <CollapsibleGroup
           title={`Versicherungen · ${fmt(ausgabenVers)}/Mo`}
           items={data.versicherungen || []}
