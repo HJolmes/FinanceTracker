@@ -79,7 +79,7 @@ export async function saveData(token, data) {
 export async function uploadDocument(token, file, category, subfolder) {
   const path = getPath();
   const fileName = file.renamedName || file.name;
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${path}/Dokumente/${category}/${subfolder}/${fileName}:/content`;
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/Dokumente/${category}/${subfolder}/${fileName}:/content`;
   const res = await fetch(url, {
     method: "PUT",
     headers: {
