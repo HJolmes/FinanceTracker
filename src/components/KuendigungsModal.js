@@ -8,17 +8,17 @@ export default function KuendigungsModal({ entry, category, onClose }) {
   const [tab, setTab] = useState("brief");
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!hasApiKey()) {
       setError("Kein Claude API-Key konfiguriert. Bitte in den Einstellungen hinterlegen.");
       setLoading(false);
       return;
     }
     generateKuendigungsschreiben(entry, category)
-      .then((r) => { setResult(r); setTab(r.email ? "brief" : "brief"); })
+      .then((r) => { setResult(r); })
       .catch((e) => setError(`Fehler: ${e.message}`))
       .finally(() => setLoading(false));
-  }, []);
+  }, [entry, category]);
 
   function copyBrief() {
     if (result?.brief) {
