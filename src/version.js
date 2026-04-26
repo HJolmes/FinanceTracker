@@ -1,6 +1,16 @@
-export const APP_VERSION = "beta v0.014";
+export const APP_VERSION = "beta v0.015";
 
 export const APP_CHANGELOG = {
+  "beta v0.015": {
+    date: "26.04.2026",
+    entries: [
+      {
+        emoji: "🧹",
+        title: "Code-Bereinigung",
+        desc: "Tote Exports entfernt (graphConfig, getGeburtsjahr, getTransactions, mapTextToFields, mapPDFToFields) – kein toter Code mehr im Projekt.",
+      },
+    ],
+  },
   "beta v0.014": {
     date: "26.04.2026",
     entries: [

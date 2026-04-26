@@ -43,6 +43,7 @@ function extractFirstJSON(text) {
         try {
           return JSON.parse(text.slice(start, i + 1));
         } catch {
+          // reset and keep looking
           start = -1;
         }
       }
