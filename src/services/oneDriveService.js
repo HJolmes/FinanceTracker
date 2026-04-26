@@ -1,88 +1,94 @@
-import { loginRequest } from "./authConfig";
-import { getFolderPath } from "./settingsService";
+import { loadSettings } from "./settingsService";
 
-const DATA_FILE = "data.json";
+const CACHE_KEY = "financetracker_data_cache";
 
-async function getAccessToken(instance, accounts) {
-  const response = await instance.acquireTokenSilent({
-    ...loginRequest,
-    account: accounts[0],
+const DEFAULT_DATA = {
+  versicherungen: [],
+  sparplaene: [],
+  leasing: [],
+  bankkonten: [],
+  steuerbelege: [],
+  einnahmen: [],
+  vermoegensVerlauf: [],
+  lastUpdated: new Date().toISOString(),
+};
+
+function getPath() {
+  return loadSettings().oneDriveFolderPath || "FinanceTracker";
+}
+
+async function graphGet(token, url) {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
   });
-  return response.accessToken;
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  return res;
 }
 
-function dataUrl() {
-  return `https://graph.microsoft.com/v1.0/me/drive/root:/${getFolderPath()}/${DATA_FILE}:/content`;
-}
-
-export async function loadData(instance, accounts) {
+export async function loadData(token) {
+  const path = getPath();
   try {
-    const token = await getAccessToken(instance, accounts);
-    const response = await fetch(dataUrl(), { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) {
-      // Not found or error – try localStorage before returning empty
-      const local = localStorage.getItem("financetracker_data");
-      return local ? JSON.parse(local) : getDefaultData();
-    }
-    const data = JSON.parse(await response.text());
-    localStorage.setItem("financetracker_data", JSON.stringify(data));
-    return data;
-  } catch (e) {
-    console.warn("OneDrive load failed", e);
-    const local = localStorage.getItem("financetracker_data");
-    return local ? JSON.parse(local) : getDefaultData();
+    const res = await graphGet(
+      token,
+      `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/data.json:/content`
+    );
+    const data = await res.json();
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    return { ...DEFAULT_DATA, ...data };
+  } catch {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) return { ...DEFAULT_DATA, ...JSON.parse(cached) };
+    } catch {}
+    return { ...DEFAULT_DATA };
   }
 }
 
-// Force-reload from OneDrive using the currently configured path.
-// Returns { data, path } on success, throws on failure.
-export async function forceReloadData(instance, accounts) {
-  const token = await getAccessToken(instance, accounts);
-  const path = getFolderPath();
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/${DATA_FILE}:/content`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) throw new Error(`Datei nicht gefunden (HTTP ${response.status}) in: ${path}`);
-  const data = JSON.parse(await response.text());
-  localStorage.setItem("financetracker_data", JSON.stringify(data));
-  return { data, path };
+export async function forceReloadData(token) {
+  const path = getPath();
+  const res = await graphGet(
+    token,
+    `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/data.json:/content`
+  );
+  if (!res.ok) throw new Error("OneDrive 404");
+  const data = await res.json();
+  localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  return { ...DEFAULT_DATA, ...data };
 }
 
-export async function saveData(instance, accounts, data) {
-  localStorage.setItem("financetracker_data", JSON.stringify(data));
+export async function saveData(token, data) {
+  const updated = { ...data, lastUpdated: new Date().toISOString() };
+  localStorage.setItem(CACHE_KEY, JSON.stringify(updated));
+  const path = getPath();
   try {
-    const token = await getAccessToken(instance, accounts);
-    await fetch(dataUrl(), {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-  } catch (e) {
-    console.warn("OneDrive save failed", e);
-  }
+    await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/${path}/data.json:/content`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updated),
+      }
+    );
+  } catch {}
+  return updated;
 }
 
-export async function uploadDocument(instance, accounts, file, category, entryId, options = {}) {
-  const token = await getAccessToken(instance, accounts);
-  const { customName, subfolder } = options;
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "pdf";
-  const fileName = customName
-    ? (customName.endsWith(`.${ext}`) ? customName : `${customName}.${ext}`)
-    : `${entryId}_${file.name}`;
-  const subPath = subfolder ? `/${subfolder}` : "";
-  const path = `/${getFolderPath()}/Dokumente/${category}${subPath}/${fileName}`;
-  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${path}:/content`;
-  const response = await fetch(url, {
+export async function uploadDocument(token, file, category, subfolder) {
+  const path = getPath();
+  const fileName = file.renamedName || file.name;
+  const url = `https://graph.microsoft.com/v1.0/me/drive/root:${path}/Dokumente/${category}/${subfolder}/${fileName}:/content`;
+  const res = await fetch(url, {
     method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": file.type || "application/octet-stream",
+    },
     body: file,
   });
-  const result = await response.json();
-  return result.webUrl;
-}
-
-function getDefaultData() {
-  return {
-    versicherungen: [], sparplaene: [], leasing: [], kredite: [], bankkonten: [],
-    lastUpdated: new Date().toISOString(),
-  };
+  if (!res.ok) throw new Error(`Upload failed ${res.status}`);
+  const json = await res.json();
+  return json.webUrl;
 }

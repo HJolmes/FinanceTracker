@@ -1,164 +1,190 @@
-// src/components/EntryList.js
 import React, { useState } from "react";
 import ETFChart from "./ETFChart";
 
-const CATEGORY_CONFIG = {
-  versicherungen: {
-    label: "Versicherungen",
-    icon: "🛡️",
-    fields: ["name", "anbieter", "typ", "beitrag", "intervall", "faelligkeit", "polizzennummer", "notiz"],
-    typen: ["Krankenversicherung", "Haftpflicht", "Kfz", "Berufsunfähigkeit", "Risikoleben", "Hausrat", "Gebäude", "Rechtsschutz", "Unfallversicherung", "Reiseversicherung", "Lebensversicherung", "Rentenversicherung", "Sonstige"],
-  },
-  sparplaene: {
-    label: "Spar Pläne & ETF",
-    icon: "📈",
-    fields: ["name", "anbieter", "typ", "beitrag", "intervall", "depot", "isin", "ticker", "anteile", "startdatum", "notiz"],
-    typen: ["ETF", "Fonds", "Aktienplan", "Festgeld", "Tagesgeld", "Bausparvertrag", "Sonstiges"],
-  },
-  leasing: {
-    label: "Leasing & Kredite",
-    icon: "🚗",
-    fields: ["name", "anbieter", "typ", "rate", "intervall", "laufzeit", "restwert", "faelligkeit", "notiz"],
-    typen: ["Kfz-Leasing", "Immobilienkredit", "Ratenkredit", "Dispositionskredit", "Sonstiges"],
-  },
-  bankkonten: {
-    label: "Bankkonten",
-    icon: "🏦",
-    fields: ["name", "bank", "typ", "iban", "kontonummer", "notiz"],
-    typen: ["Girokonto", "Tagesgeld", "Festgeld", "Depot", "Gemeinschaftskonto", "Sonstiges"],
-  },
+function DocViewer({ url, onClose }) {
+  const isImage = /\.(png|jpg|jpeg|gif|webp)(\?|$)/i.test(url);
+  return (
+    <div className="modal-overlay center" onClick={onClose}>
+      <div className="modal-dialog" style={{ maxWidth: 720, width: "95%", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 12px" }}>
+          <button className="btn-ghost" onClick={onClose}>✕ Schließen</button>
+        </div>
+        {isImage
+          ? <img src={url} alt="Dokument" style={{ width: "100%", display: "block" }} />
+          : <iframe src={url} title="Dokument" style={{ width: "100%", height: "70vh", border: "none" }} />}
+      </div>
+    </div>
+  );
+}
+
+function TaskList({ tasks, onChange }) {
+  const [newText, setNewText] = useState("");
+
+  function toggle(id) {
+    onChange(tasks.map((t) => t.id === id ? { ...t, erledigt: !t.erledigt } : t));
+  }
+
+  function add() {
+    if (!newText.trim()) return;
+    onChange([...tasks, { id: Date.now().toString(), text: newText.trim(), erledigt: false }]);
+    setNewText("");
+  }
+
+  function remove(id) {
+    onChange(tasks.filter((t) => t.id !== id));
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: "var(--text2)" }}>Aufgaben</div>
+      {tasks.map((t) => (
+        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <input type="checkbox" checked={t.erledigt} onChange={() => toggle(t.id)} style={{ width: "auto", accentColor: "var(--accent)" }} />
+          <span style={{ flex: 1, textDecoration: t.erledigt ? "line-through" : "none", color: t.erledigt ? "var(--text3)" : "var(--text)", fontSize: 14 }}>
+            {t.text}
+          </span>
+          <button className="btn-ghost" style={{ padding: "2px 6px", color: "var(--red)" }} onClick={() => remove(t.id)}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <input
+          placeholder="Neue Aufgabe…"
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          style={{ flex: 1 }}
+        />
+        <button className="btn-secondary" style={{ flexShrink: 0 }} onClick={add}>+</button>
+      </div>
+    </div>
+  );
+}
+
+const CATEGORY_LABELS = {
+  versicherungen: "Versicherungen",
+  sparplaene: "Sparpläne",
+  leasing: "Leasing & Kredite",
+  bankkonten: "Bankkonten",
+  steuerbelege: "Steuerbelege",
+  einnahmen: "Einnahmen",
 };
 
-const ETF_TYPEN = ["ETF", "Fonds", "Aktienplan"];
-
-function shouldShowChart(entry) {
-  return entry.ticker || entry.isin || ETF_TYPEN.includes(entry.typ);
-}
-
-function getMainValue(category, entry) {
-  if (category === "versicherungen" || category === "sparplaene") return entry.beitrag;
+function mainValue(entry, category) {
+  if (category === "bankkonten") return entry.kontostand;
   if (category === "leasing") return entry.rate;
-  return null;
+  if (category === "steuerbelege") return entry.betrag;
+  if (category === "einnahmen") return entry.betrag;
+  return entry.beitrag;
 }
 
-function EntryCard({ category, entry, onDelete, onEdit }) {
+function fmt(n) {
+  if (n == null || n === "") return "–";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(parseFloat(n) || 0);
+}
+
+function EntryCard({ entry, category, onEdit, onDelete, onTasksChange }) {
   const [expanded, setExpanded] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const value = getMainValue(category, entry);
+  const [viewDoc, setViewDoc] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  const tasks = entry.aufgaben || [];
+  const openTasks = tasks.filter((t) => !t.erledigt).length;
+  const val = mainValue(entry, category);
+  const docs = [entry.dokument, ...(entry.dokumente || [])].filter(Boolean);
+
+  const excludeKeys = new Set(["id", "aufgaben", "dokument", "dokumente"]);
+  const fields = Object.entries(entry).filter(([k, v]) => !excludeKeys.has(k) && v !== "" && v != null);
 
   return (
-    <div className="card fade-in" style={{ padding: 16, marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }} onClick={() => setExpanded(!expanded)}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 10, background: "var(--bg3)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0,
-        }}>
-          {CATEGORY_CONFIG[category].icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, color: "var(--text)", marginBottom: 2 }}>{entry.name || "–"}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>{entry.anbieter || entry.bank || ""} {entry.typ ? `· ${entry.typ}` : ""}</div>
-        </div>
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
-          {value && (
-            <>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--accent)" }}>
-                {parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text3)" }}>{entry.intervall || "monatl."}</div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {expanded && (
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-            {entry.polizzennummer && <InfoRow label="Polizzennr." value={entry.polizzennummer} />}
-            {entry.isin && <InfoRow label="ISIN" value={entry.isin} />}
-            {entry.ticker && <InfoRow label="Ticker" value={entry.ticker} />}
-            {entry.anteile && <InfoRow label="Anteile" value={parseFloat(entry.anteile).toLocaleString("de-DE")} />}
-            {entry.depot && <InfoRow label="Depot" value={entry.depot} />}
-            {entry.faelligkeit && <InfoRow label="Fälligkeit" value={entry.faelligkeit} />}
-            {entry.laufzeit && <InfoRow label="Laufzeit" value={entry.laufzeit} />}
-            {entry.restwert && <InfoRow label="Restwert" value={`${entry.restwert} €`} />}
-            {entry.startdatum && <InfoRow label="Start" value={entry.startdatum} />}
-            {entry.iban && <InfoRow label="IBAN" value={entry.iban} />}
-            {entry.kontonummer && <InfoRow label="Kontonr." value={entry.kontonummer} />}
-          </div>
-
-          {category === "sparplaene" && shouldShowChart(entry) && (
-            <ETFChart
-              ticker={entry.ticker}
-              isin={entry.isin}
-              entryName={entry.name}
-              anteile={entry.anteile}
-              sparrate={entry.beitrag}
-            />
-          )}
-
-          {entry.notiz && (
-            <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "var(--text2)", marginBottom: 16, marginTop: 16 }}>
-              📝 {entry.notiz}
+    <>
+      {viewDoc && <DocViewer url={viewDoc} onClose={() => setViewDoc(null)} />}
+      <div className="card" style={{ marginBottom: 10 }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+              {entry.name || entry.beschreibung || "–"}
+              {openTasks > 0 && <span className="badge">{openTasks}</span>}
             </div>
-          )}
-          {entry.dokument && (
-            <a href={entry.dokument} target="_blank" rel="noreferrer" style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              fontSize: 13, color: "var(--blue)", textDecoration: "none", marginBottom: 16,
-            }}>
-              📄 Dokument öffnen
-            </a>
-          )}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-secondary" style={{ fontSize: 13, padding: "8px 16px" }} onClick={() => onEdit(entry)}>✏️ Bearbeiten</button>
-            {!confirmDelete ? (
-              <button className="btn-ghost" style={{ color: "var(--red)", fontSize: 13 }} onClick={() => setConfirmDelete(true)}>🗑️ Löschen</button>
-            ) : (
-              <button className="btn-ghost" style={{ color: "var(--red)", fontSize: 13 }} onClick={() => onDelete(entry.id)}>Wirklich löschen?</button>
-            )}
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>
+              {entry.typ || entry.kategorie || ""}{val ? ` · ${fmt(val)}` : ""}
+              {entry.intervall ? ` · ${entry.intervall}` : ""}
+            </div>
           </div>
+          <span style={{ color: "var(--text3)" }}>{expanded ? "▲" : "▼"}</span>
         </div>
-      )}
-    </div>
+
+        {expanded && (
+          <div style={{ marginTop: 12 }}>
+            <div className="divider" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", fontSize: 13 }}>
+              {fields.map(([k, v]) => (
+                <React.Fragment key={k}>
+                  <span style={{ color: "var(--text3)" }}>{k}</span>
+                  <span style={{ color: "var(--text)" }}>{String(v)}</span>
+                </React.Fragment>
+              ))}
+            </div>
+
+            {docs.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 6 }}>Dokumente</div>
+                {docs.map((url, i) => (
+                  <button key={i} className="btn-ghost" style={{ fontSize: 13, display: "block", marginBottom: 4 }} onClick={() => setViewDoc(url)}>
+                    📄 Dokument {i + 1} öffnen
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {(category === "sparplaene") && (entry.ticker || entry.isin) && (
+              <div style={{ marginTop: 12 }}>
+                <ETFChart ticker={entry.ticker} isin={entry.isin} name={entry.name} anteile={entry.anteile} />
+              </div>
+            )}
+
+            <TaskList tasks={tasks} onChange={(t) => onTasksChange(entry.id, t)} />
+
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => onEdit(entry)}>✏️ Bearbeiten</button>
+              {confirmDel
+                ? <>
+                    <button className="btn-danger" style={{ flex: 1 }} onClick={() => onDelete(entry.id)}>Wirklich löschen?</button>
+                    <button className="btn-ghost" onClick={() => setConfirmDel(false)}>Abbrechen</button>
+                  </>
+                : <button className="btn-danger" style={{ flex: 1 }} onClick={() => setConfirmDel(true)}>🗑️ Löschen</button>
+              }
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
-function InfoRow({ label, value }) {
+export default function EntryList({ category, entries, onEdit, onDelete, onTasksChange }) {
+  if (!entries || entries.length === 0) {
+    return (
+      <div style={{ color: "var(--text3)", textAlign: "center", padding: "40px 20px" }}>
+        Noch keine Einträge in {CATEGORY_LABELS[category] || category}.
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, color: "var(--text)" }}>{value}</div>
+      {entries.map((entry) => (
+        <EntryCard
+          key={entry.id}
+          entry={entry}
+          category={category}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onTasksChange={onTasksChange}
+        />
+      ))}
     </div>
   );
 }
-
-export default function EntryList({ category, entries, onDelete, onEdit }) {
-  const config = CATEGORY_CONFIG[category];
-  if (!config) return null;
-
-  return (
-    <div className="fade-in">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <span style={{ fontSize: 24 }}>{config.icon}</span>
-        <div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--text)" }}>{config.label}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>{entries.length} Einträge</div>
-        </div>
-      </div>
-
-      {entries.length === 0 ? (
-        <div style={{ textAlign: "center", color: "var(--text3)", padding: "48px 0", fontSize: 14 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>{config.icon}</div>
-          Noch keine {config.label} – tippe auf + um einen Eintrag anzulegen
-        </div>
-      ) : (
-        entries.map((entry) => (
-          <EntryCard key={entry.id} category={category} entry={entry} onDelete={onDelete} onEdit={onEdit} />
-        ))
-      )}
-    </div>
-  );
-}
-
-export { CATEGORY_CONFIG };

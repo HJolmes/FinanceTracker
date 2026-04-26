@@ -1,209 +1,122 @@
-// src/components/TaxReceipts.js
 import React, { useState } from "react";
+import { exportSteuerbelege } from "../services/exportService";
 
-const KATEGORIEN = ["Bewirtung", "Fahrtkosten", "Arbeitsmittel", "Fortbildung", "Bürobedarf", "Sonstiges"];
-
-function DetailRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      <div style={{ fontSize: 13, color: "var(--text)", marginTop: 2 }}>{value}</div>
-    </div>
-  );
+function fmt(n) {
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(parseFloat(n) || 0);
 }
 
-function ReceiptCard({ receipt, onDelete, onEdit }) {
+function BelegCard({ beleg, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
-  const isBewirtung = receipt.kategorie === "Bewirtung";
-
-  const hasMwstSplit = receipt.netto7 || receipt.netto19;
+  const [viewDoc, setViewDoc] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const warn = beleg.kategorie === "Bewirtung" && (!beleg.teilnehmer || !beleg.zweck);
 
   return (
-    <div
-      className="card"
-      style={{ marginBottom: 10, cursor: "pointer" }}
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 2 }}>
-            {receipt.datum} · {receipt.kategorie}
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {receipt.beschreibung || receipt.partner || "Beleg"}
-          </div>
-          {receipt.partner && receipt.beschreibung && (
-            <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 1 }}>{receipt.partner}</div>
-          )}
-          {/* Pflichtfelder-Warnung für Bewirtung */}
-          {isBewirtung && (!receipt.zweck || !receipt.teilnehmer) && (
-            <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 4 }}>
-              ⚠️ {!receipt.zweck && !receipt.teilnehmer ? "Anlass + Teilnehmer fehlen" : !receipt.zweck ? "Geschäftl. Anlass fehlt" : "Teilnehmer fehlen"}
+    <>
+      {viewDoc && beleg.dokument && (
+        <div className="modal-overlay center" onClick={() => setViewDoc(false)}>
+          <div className="modal-dialog" style={{ maxWidth: 720, width: "95%", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 12px" }}>
+              <button className="btn-ghost" onClick={() => setViewDoc(false)}>✕ Schließen</button>
             </div>
-          )}
-        </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent)", flexShrink: 0, marginLeft: 12 }}>
-          {Number(receipt.betrag || 0).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-        </div>
-      </div>
-
-      {expanded && (
-        <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-
-          {/* Bewirtungs-Pflichtfelder */}
-          {isBewirtung && (
-            <>
-              <DetailRow label="Geschäftlicher Anlass" value={receipt.zweck} />
-              <DetailRow label="Teilnehmer" value={receipt.teilnehmer} />
-            </>
-          )}
-
-          {/* MwSt-Anzeige */}
-          {isBewirtung && hasMwstSplit ? (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>MwSt-Aufschlüsselung</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {receipt.netto7 && (
-                  <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "6px 10px" }}>
-                    <div style={{ fontSize: 10, color: "var(--text3)" }}>Speisen (7%)</div>
-                    <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
-                      {Number(receipt.netto7).toLocaleString("de-DE", { minimumFractionDigits: 2 })} € Netto
-                    </div>
-                  </div>
-                )}
-                {receipt.netto19 && (
-                  <div style={{ background: "var(--bg3)", borderRadius: 8, padding: "6px 10px" }}>
-                    <div style={{ fontSize: 10, color: "var(--text3)" }}>Getränke (19%)</div>
-                    <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
-                      {Number(receipt.netto19).toLocaleString("de-DE", { minimumFractionDigits: 2 })} € Netto
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : receipt.mwst ? (
-            <DetailRow label="MwSt." value={`${receipt.mwst} %`} />
-          ) : null}
-
-          {/* Zweck für Nicht-Bewirtung */}
-          {!isBewirtung && receipt.zweck && (
-            <DetailRow label="Zweck" value={receipt.zweck} />
-          )}
-
-          {receipt.dokument && (
-            <div style={{ marginBottom: 8 }}>
-              <a href={receipt.dokument} target="_blank" rel="noreferrer"
-                style={{ fontSize: 13, color: "var(--blue)", textDecoration: "none" }}
-                onClick={(e) => e.stopPropagation()}>
-                📎 Beleg öffnen
-              </a>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button className="btn-secondary" style={{ flex: 1, fontSize: 12, padding: "8px" }}
-              onClick={(e) => { e.stopPropagation(); onEdit(receipt); }}>
-              Bearbeiten
-            </button>
-            <button
-              style={{ background: "var(--red)", color: "#fff", padding: "8px 16px", borderRadius: "var(--radius-sm)", fontSize: 12 }}
-              onClick={(e) => { e.stopPropagation(); onDelete(receipt.id); }}>
-              Löschen
-            </button>
+            <iframe src={beleg.dokument} title="Beleg" style={{ width: "100%", height: "70vh", border: "none" }} />
           </div>
         </div>
       )}
-    </div>
+      <div className="card" style={{ marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+              {beleg.partner || "–"}
+              {warn && <span title="Bewirtung unvollständig" style={{ color: "var(--accent)" }}>⚠️</span>}
+            </div>
+            <div style={{ color: "var(--text2)", fontSize: 13 }}>
+              {beleg.datum} · {beleg.kategorie} · {fmt(beleg.betrag)}
+            </div>
+          </div>
+          <span style={{ color: "var(--text3)" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+
+        {expanded && (
+          <div style={{ marginTop: 12 }}>
+            <div className="divider" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", fontSize: 13 }}>
+              {beleg.mwst && <><span style={{ color: "var(--text3)" }}>MwSt</span><span>{fmt(beleg.mwst)}</span></>}
+              {beleg.netto7 && <><span style={{ color: "var(--text3)" }}>Netto 7%</span><span>{fmt(beleg.netto7)}</span></>}
+              {beleg.netto19 && <><span style={{ color: "var(--text3)" }}>Netto 19%</span><span>{fmt(beleg.netto19)}</span></>}
+              {beleg.teilnehmer && <><span style={{ color: "var(--text3)" }}>Teilnehmer</span><span>{beleg.teilnehmer}</span></>}
+              {beleg.zweck && <><span style={{ color: "var(--text3)" }}>Zweck</span><span>{beleg.zweck}</span></>}
+              {beleg.beschreibung && <><span style={{ color: "var(--text3)" }}>Beschreibung</span><span>{beleg.beschreibung}</span></>}
+            </div>
+            {beleg.dokument && (
+              <button className="btn-ghost" style={{ fontSize: 13, marginTop: 8 }} onClick={() => setViewDoc(true)}>
+                📄 Dokument öffnen
+              </button>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button className="btn-secondary" style={{ flex: 1 }} onClick={() => onEdit(beleg)}>✏️ Bearbeiten</button>
+              {confirmDel
+                ? <>
+                    <button className="btn-danger" style={{ flex: 1 }} onClick={() => onDelete(beleg.id)}>Wirklich löschen?</button>
+                    <button className="btn-ghost" onClick={() => setConfirmDel(false)}>Abbrechen</button>
+                  </>
+                : <button className="btn-danger" style={{ flex: 1 }} onClick={() => setConfirmDel(true)}>🗑️ Löschen</button>
+              }
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
-export default function TaxReceipts({ receipts = [], onDelete, onEdit }) {
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+export default function TaxReceipts({ data, onEdit, onDelete }) {
+  const belege = data.steuerbelege || [];
+  const years = [...new Set(belege.map((b) => b.datum?.slice(0, 4)).filter(Boolean))].sort().reverse();
+  const [jahr, setJahr] = useState(years[0] || String(new Date().getFullYear()));
 
-  const years = [...new Set(receipts.map((r) => r.datum?.slice(0, 4)).filter(Boolean))].sort().reverse();
-  if (!years.includes(String(currentYear))) years.unshift(String(currentYear));
+  const filtered2 = belege.filter((b) => b.datum?.startsWith(jahr));
+  const summe = filtered2.reduce((s, b) => s + (parseFloat(b.betrag) || 0), 0);
 
-  const filtered = receipts.filter((r) => r.datum?.startsWith(String(selectedYear)));
-
-  const grouped = {};
-  KATEGORIEN.forEach((k) => { grouped[k] = []; });
-  filtered.forEach((r) => {
-    const cat = r.kategorie || "Sonstiges";
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(r);
-  });
-
-  const total = filtered.reduce((sum, r) => sum + (Number(r.betrag) || 0), 0);
-  const activeCats = KATEGORIEN.filter((k) => grouped[k]?.length > 0);
-
-  const bewirtungMissing = (grouped["Bewirtung"] || []).filter((r) => !r.zweck || !r.teilnehmer).length;
+  const byKat = {};
+  for (const b of filtered2) {
+    byKat[b.kategorie || "Sonstiges"] = (byKat[b.kategorie || "Sonstiges"] || 0) + (parseFloat(b.betrag) || 0);
+  }
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {years.map((y) => (
-          <button key={y}
-            onClick={() => setSelectedYear(Number(y))}
-            style={{
-              padding: "6px 14px", borderRadius: 20, fontSize: 13,
-              background: selectedYear === Number(y) ? "var(--accent)" : "var(--surface2)",
-              color: selectedYear === Number(y) ? "#0f1923" : "var(--text2)",
-              fontWeight: selectedYear === Number(y) ? 600 : 400,
-              border: "1px solid var(--border)",
-            }}
-          >{y}</button>
+          <button key={y} onClick={() => setJahr(y)}
+            style={{ padding: "6px 14px", fontSize: 13, borderRadius: 6, background: y === jahr ? "var(--accent)" : "var(--bg3)", color: y === jahr ? "#0f1923" : "var(--text2)", border: "none", cursor: "pointer" }}>
+            {y}
+          </button>
+        ))}
+        <button className="btn-secondary" style={{ marginLeft: "auto", fontSize: 13 }} onClick={() => exportSteuerbelege(belege, jahr)}>
+          📊 Excel exportieren
+        </button>
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Jahressumme {jahr}: <span style={{ color: "var(--accent)" }}>
+          {new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(summe)}
+        </span></div>
+        {Object.entries(byKat).map(([k, v]) => (
+          <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
+            <span style={{ color: "var(--text2)" }}>{k}</span>
+            <span>{new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(v)}</span>
+          </div>
         ))}
       </div>
 
-      <div className="card" style={{ marginBottom: 16, background: "var(--surface2)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 13, color: "var(--text3)" }}>Gesamt {selectedYear}</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
-            {total.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
-          </span>
-        </div>
-        {activeCats.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {activeCats.map((k) => {
-              const catTotal = grouped[k].reduce((s, r) => s + (Number(r.betrag) || 0), 0);
-              return (
-                <div key={k} style={{
-                  fontSize: 11, color: "var(--text2)", background: "var(--surface)",
-                  padding: "3px 8px", borderRadius: 12, border: "1px solid var(--border)",
-                }}>
-                  {k}: {catTotal.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {bewirtungMissing > 0 && (
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--accent)", padding: "6px 10px", background: "rgba(232,168,56,0.10)", borderRadius: 8, border: "1px solid rgba(232,168,56,0.25)" }}>
-            ⚠️ {bewirtungMissing} Bewirtungsbeleg{bewirtungMissing > 1 ? "e" : ""} ohne vollständige Pflichtangaben (Anlass / Teilnehmer)
-          </div>
-        )}
-      </div>
+      {filtered2.map((b) => (
+        <BelegCard key={b.id} beleg={b} onEdit={onEdit} onDelete={onDelete} />
+      ))}
 
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text3)" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🧧</div>
-          <div style={{ fontSize: 15 }}>Noch keine Belege für {selectedYear}</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>Beleg hinzufügen mit dem + Button</div>
+      {filtered2.length === 0 && (
+        <div style={{ color: "var(--text3)", textAlign: "center", padding: "40px" }}>
+          Keine Belege für {jahr}.
         </div>
-      ) : (
-        activeCats.map((k) => (
-          <div key={k} style={{ marginBottom: 20 }}>
-            <div style={{
-              fontSize: 11, fontWeight: 600, color: "var(--text3)",
-              textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8,
-            }}>{k}</div>
-            {grouped[k].map((r) => (
-              <ReceiptCard key={r.id} receipt={r} onDelete={onDelete} onEdit={onEdit} />
-            ))}
-          </div>
-        ))
       )}
     </div>
   );

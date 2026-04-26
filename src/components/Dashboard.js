@@ -1,316 +1,152 @@
-import React, { useState } from "react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { extractTextFromFile, isPDF } from "../services/ocrService";
-import { detectAndExtractFromText, detectAndExtractFromPDF, getClaudeApiKey } from "../services/claudeService";
-import { getSettings } from "../services/settingsService";
+import React from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
-const COLORS = ["#e8a838", "#4a9eff", "#3dd68c", "#a78bfa", "#f06060"];
-
-const CATEGORIES = {
-  versicherungen: { label: "Versicherungen", icon: "🛡️" },
-  sparplaene: { label: "Sparpläne", icon: "📈" },
-  leasing: { label: "Leasing & Kredite", icon: "🚗" },
-  bankkonten: { label: "Bankkonten", icon: "🏦" },
+const toMonthly = (betrag, intervall) => {
+  const b = parseFloat(betrag) || 0;
+  if (intervall === "jährlich") return b / 12;
+  if (intervall === "halbjährlich") return b / 6;
+  if (intervall === "quartalsweise") return b / 3;
+  if (intervall === "einmalig") return 0;
+  return b;
 };
 
-function sumMonthly(entries) {
-  return entries.reduce((sum, e) => {
-    const b = parseFloat(e.beitrag || e.rate || e.betrag || 0);
-    if (e.intervall === "jährlich") return sum + b / 12;
-    if (e.intervall === "quartalsweise") return sum + b / 3;
-    return sum + b;
-  }, 0);
+const PIE_COLORS = ["#e8a838", "#4caf82", "#e05555", "#5b9bd5", "#9c5bb5", "#e07d38"];
+
+function fmt(n) {
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n || 0);
 }
 
-function sumField(entries, field) {
-  return entries.reduce((sum, e) => sum + parseFloat(e[field] || 0), 0);
-}
+export default function Dashboard({ data, onAddEntry, onTabChange, faelligkeitenWarnungen, geburtsjahr }) {
+  const einnahmen = (data.einnahmen || []).reduce((s, e) => s + toMonthly(e.betrag, e.intervall), 0);
+  const ausgaben = [...(data.versicherungen || []), ...(data.leasing || []), ...(data.sparplaene || [])]
+    .reduce((s, e) => s + toMonthly(e.beitrag ?? e.rate, e.intervall), 0);
+  const saldo = einnahmen - ausgaben;
 
-function WealthRow({ label, value, color, suffix }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ fontSize: 13, color: "var(--text2)" }}>{label}</div>
-      <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: color || "var(--text)" }}>
-        {suffix
-          ? `${parseFloat(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${suffix}`
-          : parseFloat(value).toLocaleString("de-DE", { style: "currency", currency: "EUR" })
-        }
-      </div>
-    </div>
+  const bankGuthaben = (data.bankkonten || []).reduce((s, e) => s + (parseFloat(e.kontostand) || 0), 0);
+  const depotwert = (data.sparplaene || []).reduce((s, e) => s + (parseFloat(e.depotwert) || 0), 0);
+  const rueckkauf = (data.versicherungen || []).reduce((s, e) => s + (parseFloat(e.rueckkaufswert) || 0), 0);
+  const gesamtVermoegen = bankGuthaben + depotwert + rueckkauf;
+
+  const categoryAusgaben = [
+    { name: "Versicherungen", value: (data.versicherungen || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0) },
+    { name: "Leasing/Kredite", value: (data.leasing || []).reduce((s, e) => s + toMonthly(e.rate, e.intervall), 0) },
+    { name: "Sparpläne", value: (data.sparplaene || []).reduce((s, e) => s + toMonthly(e.beitrag, e.intervall), 0) },
+  ].filter((c) => c.value > 0);
+
+  const verlauf = (data.vermoegensVerlauf || []).sort((a, b) => a.datum.localeCompare(b.datum));
+  const showVerlauf = verlauf.length >= 2;
+
+  const nextFaellig = [...(data.versicherungen || []), ...(data.leasing || [])]
+    .filter((e) => e.faelligkeit)
+    .sort((a, b) => a.faelligkeit.localeCompare(b.faelligkeit))
+    .slice(0, 3);
+
+  const alter = geburtsjahr ? new Date().getFullYear() - parseInt(geburtsjahr) : null;
+  const renteVorsorge = (data.versicherungen || []).filter(
+    (v) => v.monatsrenteJetzt || v.renteMit67Niedrig || v.renteMit67Hoch
   );
-}
-
-function findMatchingEntry(data, result) {
-  if (!result || !data) return null;
-  const cat = result.category;
-  const entries = data[cat] || [];
-  if (result.polizzennummer) {
-    const match = entries.find((e) => e.polizzennummer === result.polizzennummer);
-    if (match) return match;
-  }
-  if (result.isin) {
-    const match = entries.find((e) => e.isin === result.isin);
-    if (match) return match;
-  }
-  if (result.iban) {
-    const match = entries.find((e) => e.iban === result.iban);
-    if (match) return match;
-  }
-  return null;
-}
-
-function SmartUpload({ onSmartUpload, onAddDocument, data }) {
-  const [state, setState] = useState(null);
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState(null);
-  const [pendingFile, setPendingFile] = useState(null);
-  const [error, setError] = useState("");
-  const hasKey = !!getClaudeApiKey();
-
-  const handleFile = async (file) => {
-    setPendingFile(file);
-    setResult(null);
-    setError("");
-    try {
-      let extracted;
-      if (isPDF(file)) {
-        setState("ai");
-        extracted = await detectAndExtractFromPDF(file);
-      } else {
-        setState("ocr");
-        setProgress(0);
-        const text = await extractTextFromFile(file, (p) => setProgress(p));
-        setState("ai");
-        extracted = await detectAndExtractFromText(text);
-      }
-      setResult(extracted);
-      setState("done");
-    } catch (e) {
-      setState("error");
-      setError(e.message === "NO_KEY" ? "Kein API-Key hinterlegt (→ ⚙️ Einstellungen)" : e.message);
-    }
-  };
-
-  const reset = () => { setState(null); setResult(null); setPendingFile(null); setError(""); };
-
-  const handleCreate = () => {
-    if (!result) return;
-    const { category, ...fields } = result;
-    onSmartUpload(category, fields, pendingFile);
-    reset();
-  };
-
-  const handleAddToExisting = () => {
-    if (!result || !pendingFile) return;
-    const match = findMatchingEntry(data, result);
-    if (!match) return;
-    const { category, ...fields } = result;
-    onAddDocument(category, match.id, fields, pendingFile);
-    reset();
-  };
-
-  const matchingEntry = result ? findMatchingEntry(data, result) : null;
 
   return (
-    <div className="card" style={{ padding: "16px 20px" }}>
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>🤖 Dokument hochladen & automatisch zuweisen</div>
-
-      {!hasKey && (
-        <div style={{ fontSize: 12, color: "var(--text3)", background: "var(--bg3)", borderRadius: 8, padding: "10px 12px" }}>
-          ⚠️ Kein Claude API-Key — bitte in ⚙️ Einstellungen ergänzen.
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {faelligkeitenWarnungen?.length > 0 && (
+        <div className="alert alert-red" style={{ cursor: "pointer" }} onClick={() => onTabChange("kalender")}>
+          <strong>⚠️ Fälligkeiten in den nächsten 30 Tagen:</strong>
+          <ul style={{ marginTop: 6, paddingLeft: 16 }}>
+            {faelligkeitenWarnungen.map((w, i) => (
+              <li key={i}>{w.entry.name} – {w.label} – {w.dateStr} ({w.diffDays} Tage)</li>
+            ))}
+          </ul>
         </div>
       )}
 
-      {hasKey && state === null && (
-        <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "var(--bg3)", border: "1px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: "14px 20px", cursor: "pointer", fontSize: 13, color: "var(--text2)" }}>
-          📎  PDF oder Foto auswählen
-          <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
-            onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
-        </label>
-      )}
-
-      {state === "ocr" && (
-        <div style={{ fontSize: 13, color: "var(--text2)" }}>
-          <div style={{ marginBottom: 8 }}>🔍 Text wird erkannt… {progress}%</div>
-          <div style={{ background: "var(--bg3)", borderRadius: 4, height: 6, overflow: "hidden" }}>
-            <div style={{ background: "var(--accent)", width: `${progress}%`, height: "100%", borderRadius: 4, transition: "width 0.3s" }} />
-          </div>
-        </div>
-      )}
-
-      {state === "ai" && <div style={{ fontSize: 13, color: "var(--text2)" }}>🤖 KI analysiert Dokument…</div>}
-
-      {state === "done" && result && (
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 24 }}>{CATEGORIES[result.category]?.icon}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--green)" }}>{CATEGORIES[result.category]?.label} erkannt</div>
-              {result.name && <div style={{ fontSize: 12, color: "var(--text3)" }}>{result.name}</div>}
-            </div>
-          </div>
-
-          {matchingEntry && (
-            <div style={{ background: "rgba(61,214,140,0.1)", border: "1px solid var(--green)", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12 }}>
-              <div style={{ color: "var(--green)", fontWeight: 600, marginBottom: 2 }}>✓ Bestehende Police gefunden</div>
-              <div style={{ color: "var(--text2)" }}>{matchingEntry.name} · {matchingEntry.anbieter}</div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {matchingEntry && (
-              <button className="btn-primary" onClick={handleAddToExisting} style={{ flex: 2, fontSize: 13 }}>
-                📎 Zur Police hinzufügen
-              </button>
-            )}
-            <button className={matchingEntry ? "btn-secondary" : "btn-primary"} onClick={handleCreate} style={{ flex: matchingEntry ? 1 : 2, fontSize: 13 }}>
-              {matchingEntry ? "Neuer Eintrag" : "Eintrag erstellen →"}
-            </button>
-            <button className="btn-ghost" onClick={reset} style={{ fontSize: 18, padding: "8px 12px" }}>✕</button>
-          </div>
-        </div>
-      )}
-
-      {state === "error" && (
-        <div>
-          <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>❌ {error}</div>
-          <button className="btn-ghost" onClick={reset} style={{ fontSize: 12 }}>Erneut versuchen</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Dashboard({ data, onSmartUpload, onAddDocument }) {
-  const monthlyKosten = {
-    versicherungen: sumMonthly(data.versicherungen || []),
-    sparplaene: sumMonthly(data.sparplaene || []),
-    leasing: sumMonthly(data.leasing || []),
-    bankkonten: 0,
-  };
-  const totalMonthly = Object.values(monthlyKosten).reduce((a, b) => a + b, 0);
-  const totalYearly = totalMonthly * 12;
-  const pieData = Object.entries(monthlyKosten).filter(([, v]) => v > 0)
-    .map(([key, value]) => ({ name: CATEGORIES[key].label, value: Math.round(value * 100) / 100 }));
-  const totalEntries = Object.values(data).filter(Array.isArray).flat().length;
-  const lastUpdated = data.lastUpdated
-    ? new Date(data.lastUpdated).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
-    : "–";
-
-  const bankguthaben = sumField(data.bankkonten || [], "kontostand");
-  const depotwert = sumField(data.sparplaene || [], "depotwert");
-  const versicherungswert = sumField(data.versicherungen || [], "rueckkaufswert");
-  const gesamtvermoegen = bankguthaben + depotwert + versicherungswert;
-  const hasVermoegen = gesamtvermoegen > 0;
-
-  const monatsrenteJetzt = sumField(data.versicherungen || [], "monatsrenteJetzt");
-  const monatsrenteMit67 = sumField(data.versicherungen || [], "monatsrenteMit67");
-  const hasRente = monatsrenteJetzt > 0 || monatsrenteMit67 > 0;
-  const settings = getSettings();
-  const geburtsjahr = parseInt(settings.geburtsjahr) || null;
-  const currentYear = new Date().getFullYear();
-  const alter = geburtsjahr ? currentYear - geburtsjahr : null;
-  const jahreZu67 = alter !== null ? Math.max(0, 67 - alter) : null;
-
-  return (
-    <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-      <SmartUpload onSmartUpload={onSmartUpload} onAddDocument={onAddDocument} data={data} />
-
-      {(hasVermoegen || hasRente) && (
-        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>💰 Vermögensübersicht</div>
-          {hasVermoegen && (
-            <>
-              {bankguthaben > 0 && <WealthRow label="🏦 Bankguthaben" value={bankguthaben} color="var(--green)" />}
-              {depotwert > 0 && <WealthRow label="📈 Depotwert" value={depotwert} color="var(--green)" />}
-              {versicherungswert > 0 && <WealthRow label="🛡️ Versicherungswert (Rückkauf)" value={versicherungswert} color="var(--accent)" />}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, marginTop: 4 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Gesamt</div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--green)" }}>
-                  {gesamtvermoegen.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
-                </div>
-              </div>
-            </>
-          )}
-          {hasRente && (
-            <>
-              {hasVermoegen && <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />}
-              <div style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Rentenvorschau</div>
-              {monatsrenteJetzt > 0 && <WealthRow label="Monatliche Rente (jetzt)" value={monatsrenteJetzt} suffix="€/Monat" color="var(--text2)" />}
-              {monatsrenteMit67 > 0 && <WealthRow label="Monatliche Rente (mit 67)" value={monatsrenteMit67} suffix="€/Monat" color="var(--green)" />}
-              {jahreZu67 !== null && (
-                <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>
-                  {jahreZu67 > 0 ? `⏳ Noch ${jahreZu67} Jahre bis zum Rentenalter (67)` : "✅ Rentenalter bereits erreicht"}
-                </div>
-              )}
-              {!geburtsjahr && <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>💡 Geburtsjahr in ⚙️ Einstellungen hinterlegen</div>}
-            </>
-          )}
-        </div>
-      )}
-
-      <div style={{ background: "linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%)", border: "1px solid var(--border)", borderRadius: 16, padding: "24px 20px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -20, right: -20, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(232,168,56,0.15) 0%, transparent 70%)" }} />
-        <div style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Monatliche Gesamtausgaben</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 42, color: "var(--accent)", letterSpacing: "-0.02em" }}>
-          {totalMonthly.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
-        </div>
-        <div style={{ color: "var(--text2)", fontSize: 13, marginTop: 4 }}>{totalYearly.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / Jahr</div>
-        <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
-          <div style={{ color: "var(--text3)", fontSize: 12 }}>📋 {totalEntries} Einträge</div>
-          <div style={{ color: "var(--text3)", fontSize: 12 }}>🔄 Stand: {lastUpdated}</div>
-        </div>
-      </div>
-
-      {pieData.length > 0 && (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
         <div className="card">
-          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text2)", marginBottom: 16 }}>Verteilung monatl. Kosten</div>
+          <div style={{ color: "var(--text2)", fontSize: 12 }}>Einnahmen/Monat</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--green)", marginTop: 4 }}>{fmt(einnahmen)}</div>
+        </div>
+        <div className="card">
+          <div style={{ color: "var(--text2)", fontSize: 12 }}>Ausgaben/Monat</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--red)", marginTop: 4 }}>{fmt(ausgaben)}</div>
+        </div>
+        <div className="card">
+          <div style={{ color: "var(--text2)", fontSize: 12 }}>Saldo/Monat</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: saldo >= 0 ? "var(--green)" : "var(--red)", marginTop: 4 }}>
+            {fmt(saldo)}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ color: "var(--text2)", fontSize: 12 }}>Gesamtvermögen</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent)", marginTop: 4 }}>{fmt(gesamtVermoegen)}</div>
+        </div>
+      </div>
+
+      {categoryAusgaben.length > 0 && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Kostenverteilung/Monat</div>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              <Pie data={categoryAusgaben} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${fmt(value)}`}>
+                {categoryAusgaben.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
               </Pie>
-              <Tooltip formatter={(v) => v.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
-                contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
+              <Tooltip formatter={(v) => fmt(v)} />
             </PieChart>
           </ResponsiveContainer>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            {pieData.map((d, i) => (
-              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text2)" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS[i % COLORS.length] }} />
-                {d.name}: {d.value.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {Object.entries(CATEGORIES).map(([key, { label, icon }]) => {
-          const entries = data[key] || [];
-          const monthly = monthlyKosten[key];
-          const balance = key === "bankkonten" ? sumField(entries, "kontostand") : key === "sparplaene" ? sumField(entries, "depotwert") : 0;
-          return (
-            <div key={key} className="card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 22, marginBottom: 8 }}>{icon}</div>
-              <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>{label}</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--text)" }}>
-                {monthly > 0 ? monthly.toLocaleString("de-DE", { style: "currency", currency: "EUR" }) : "—"}
-              </div>
-              {balance > 0 && <div style={{ fontSize: 12, color: "var(--green)", marginTop: 2 }}>{balance.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} Bestand</div>}
-              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{entries.length} Einträge</div>
+      {showVerlauf && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Nettovermögen-Verlauf</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={verlauf}>
+              <XAxis dataKey="datum" tick={{ fill: "var(--text3)", fontSize: 11 }} />
+              <YAxis tick={{ fill: "var(--text3)", fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v) => fmt(v)} />
+              <Line type="monotone" dataKey="wert" stroke="var(--accent)" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {alter !== null && renteVorsorge.length > 0 && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Altersvorsorge-Vorschau (Alter: {alter} J.)</div>
+          {renteVorsorge.map((v, i) => (
+            <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontWeight: 500 }}>{v.name}</div>
+              {v.monatsrenteJetzt && <div style={{ color: "var(--text2)", fontSize: 13 }}>Jetzt: {fmt(v.monatsrenteJetzt)}/Monat</div>}
+              {v.renteMit67Niedrig && <div style={{ color: "var(--text2)", fontSize: 13 }}>Mit 67 (niedrig): {fmt(v.renteMit67Niedrig)}/Monat</div>}
+              {v.renteMit67Hoch && <div style={{ color: "var(--green)", fontSize: 13 }}>Mit 67 (hoch): {fmt(v.renteMit67Hoch)}/Monat</div>}
             </div>
-          );
-        })}
-      </div>
-
-      {totalEntries === 0 && (
-        <div style={{ textAlign: "center", color: "var(--text3)", padding: "32px 0", fontSize: 14 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
-          Noch keine Einträge — lade ein Dokument hoch oder wähle unten eine Kategorie!
+          ))}
         </div>
       )}
+
+      {nextFaellig.length > 0 && (
+        <div className="card">
+          <div style={{ fontWeight: 600, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+            <span>Nächste Fälligkeiten</span>
+            <button className="btn-ghost" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => onTabChange("kalender")}>Alle →</button>
+          </div>
+          {nextFaellig.map((e, i) => {
+            const days = Math.floor((new Date(e.faelligkeit) - new Date()) / 86400000);
+            return (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                <span>{e.name}</span>
+                <span style={{ color: days < 30 ? "var(--red)" : days < 90 ? "var(--accent)" : "var(--green)", fontSize: 13 }}>
+                  {e.faelligkeit} ({days} Tage)
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <button className="btn-secondary" onClick={() => onAddEntry()}>
+        + Eintrag hinzufügen
+      </button>
     </div>
   );
 }

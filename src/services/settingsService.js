@@ -1,19 +1,19 @@
 const SETTINGS_KEY = "financetracker_settings";
-const DEFAULT_PATH = "FinanceTracker";
 
-export function getSettings() {
+const defaults = {
+  oneDriveFolderPath: "FinanceTracker",
+  geburtsjahr: "",
+};
+
+export function loadSettings() {
   try {
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    return stored ? JSON.parse(stored) : { oneDriveFolderPath: DEFAULT_PATH, geburtsjahr: "", bankingFunctionUrl: "" };
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults };
   } catch {
-    return { oneDriveFolderPath: DEFAULT_PATH, geburtsjahr: "", bankingFunctionUrl: "" };
+    return { ...defaults };
   }
 }
 
 export function saveSettings(settings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-export function getFolderPath() {
-  return getSettings().oneDriveFolderPath || DEFAULT_PATH;
 }

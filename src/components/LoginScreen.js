@@ -1,55 +1,81 @@
-// src/components/LoginScreen.js
-import React from "react";
+import React, { useState } from "react";
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "../services/authConfig";
 
-export default function LoginScreen({ onLogin }) {
+const FEATURES = [
+  { icon: "🛡️", title: "Versicherungen", desc: "Alle Policen im Überblick" },
+  { icon: "📈", title: "Sparpläne & ETFs", desc: "Live-Kursdaten & Depotübersicht" },
+  { icon: "🤖", title: "KI-Dokumentenscan", desc: "PDF & Bilder automatisch auslesen" },
+  { icon: "☁️", title: "OneDrive-Sync", desc: "Daten sicher im eigenen Cloud-Speicher" },
+];
+
+export default function LoginScreen() {
+  const { instance } = useMsal();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleLogin() {
+    setLoading(true);
+    setError("");
+    try {
+      await instance.loginPopup(loginRequest);
+    } catch (e) {
+      if (!e.message?.includes("user_cancelled")) {
+        setError("Anmeldung fehlgeschlagen. Bitte erneut versuchen.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", height: "100%", padding: 40, textAlign: "center",
+      minHeight: "100dvh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px",
+      gap: "32px",
     }}>
-      {/* Logo / Title */}
-      <div style={{ marginBottom: 48 }}>
-        <div style={{
-          width: 80, height: 80, borderRadius: "50%",
-          background: "linear-gradient(135deg, var(--accent), var(--surface2))",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 36, margin: "0 auto 24px", boxShadow: "0 8px 32px rgba(232,168,56,0.3)",
-        }}>💰</div>
-        <h1 style={{
-          fontFamily: "var(--font-display)", fontSize: 36,
-          color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 8,
-        }}>
-          Finance<span style={{ color: "var(--accent)" }}>Tracker</span>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>💰</div>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--accent)", marginBottom: 8 }}>
+          FinanceTracker
         </h1>
-        <p style={{ color: "var(--text2)", fontSize: 15, lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
-          Dein persönlicher Manager für Versicherungen, Sparpläne & Finanzen
-        </p>
+        <p style={{ color: "var(--text2)", fontSize: 15 }}>Meine Finanzen – alles an einem Ort</p>
       </div>
 
-      {/* Features */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 48, width: "100%", maxWidth: 280 }}>
-        {[
-          ["🛡️", "Versicherungen im Überblick"],
-          ["📈", "Sparpläne & ETFs tracken"],
-          ["🏦", "Kredite & Leasing verwalten"],
-          ["☁️", "Sicher in OneDrive gespeichert"],
-        ].map(([icon, text]) => (
-          <div key={text} style={{
-            display: "flex", alignItems: "center", gap: 12,
-            background: "var(--surface)", borderRadius: "var(--radius-sm)",
-            padding: "12px 16px", border: "1px solid var(--border)", textAlign: "left",
-          }}>
-            <span style={{ fontSize: 20 }}>{icon}</span>
-            <span style={{ fontSize: 14, color: "var(--text2)" }}>{text}</span>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        gap: 12,
+        width: "100%",
+        maxWidth: 520,
+      }}>
+        {FEATURES.map((f) => (
+          <div key={f.title} className="card" style={{ textAlign: "center", padding: 16 }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>{f.icon}</div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{f.title}</div>
+            <div style={{ color: "var(--text3)", fontSize: 12 }}>{f.desc}</div>
           </div>
         ))}
       </div>
 
-      <button className="btn-primary" onClick={onLogin} style={{ width: "100%", maxWidth: 280, padding: "16px 24px", fontSize: 16 }}>
-        Mit Microsoft anmelden
+      {error && <div className="alert alert-red" style={{ maxWidth: 360, width: "100%" }}>{error}</div>}
+
+      <button
+        className="btn-primary"
+        style={{ width: "100%", maxWidth: 360, padding: "14px 24px", fontSize: 16 }}
+        onClick={handleLogin}
+        disabled={loading}
+      >
+        {loading ? "Anmelden…" : "🔑 Mit Microsoft anmelden"}
       </button>
-      <p style={{ color: "var(--text3)", fontSize: 12, marginTop: 16 }}>
-        Deine Daten werden sicher in deinem OneDrive gespeichert
+
+      <p style={{ color: "var(--text3)", fontSize: 12, textAlign: "center", maxWidth: 340 }}>
+        Deine Daten werden ausschließlich in deinem eigenen OneDrive gespeichert.
+        Anthropic hat keinen Zugriff auf deine Finanzdaten.
       </p>
     </div>
   );
