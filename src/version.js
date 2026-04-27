@@ -1,5 +1,11 @@
-export const APP_VERSION = "beta v0.004";
+export const APP_VERSION = "beta v0.005";
 export const APP_CHANGELOG = {
+  "beta v0.005": {
+    date: "27.04.2026",
+    entries: [
+      { emoji: "📒", title: "Changelog-Regel geschaerft", desc: "Agents muessen den Changelog pro Session lesen und bei deploybaren Aenderungen fortschreiben." }
+    ]
+  },
   "beta v0.004": {
     date: "27.04.2026",
     entries: [

@@ -11,6 +11,8 @@ These rules apply to Claude Code, Codex, and human contributors working in this 
 
 ## Versioning
 
+- At the start of every work session, read `src/version.js` once to understand the current version and changelog.
+- Changelogs are mandatory for deployable changes. Keep `APP_CHANGELOG` current and user-readable.
 - For every functional or code-related change intended for `main`, update `src/version.js`.
 - Increment the current `beta v0.xxx` version by `0.001`.
 - Add an `APP_CHANGELOG` entry explaining the user-visible change.
