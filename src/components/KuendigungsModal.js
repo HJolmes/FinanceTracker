@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { generateKuendigungsschreiben, hasApiKey } from "../services/claudeService";
+import { generateKuendigungsschreiben, hasAiProxyConfig } from "../services/claudeService";
 
 export default function KuendigungsModal({ entry, category, onClose }) {
   const [loading, setLoading] = useState(true);
@@ -9,8 +9,8 @@ export default function KuendigungsModal({ entry, category, onClose }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!hasApiKey()) {
-      setError("Kein Claude API-Key konfiguriert. Bitte in den Einstellungen hinterlegen.");
+    if (!hasAiProxyConfig()) {
+      setError("KI-Proxy nicht konfiguriert. Bitte REACT_APP_AI_PROXY_URL und REACT_APP_AI_PROXY_SECRET setzen.");
       setLoading(false);
       return;
     }

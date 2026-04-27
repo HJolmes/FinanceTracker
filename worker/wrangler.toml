@@ -1,0 +1,13 @@
+name = "financetracker-ai-proxy"
+main = "src/index.js"
+compatibility_date = "2026-04-27"
+
+[vars]
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+ALLOWED_ORIGINS = "https://hjolmes.github.io,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8787,http://127.0.0.1:8787"
+
+[secrets]
+required = [
+  "ANTHROPIC_API_KEY",
+  "FINANCETRACKER_PROXY_SECRET"
+]

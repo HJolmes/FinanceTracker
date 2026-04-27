@@ -17,6 +17,9 @@ jobs:
           node-version: 20
       - run: npm install --legacy-peer-deps
       - run: npm run build
+        env:
+          REACT_APP_AI_PROXY_URL: ${{ secrets.REACT_APP_AI_PROXY_URL }}
+          REACT_APP_AI_PROXY_SECRET: ${{ secrets.REACT_APP_AI_PROXY_SECRET }}
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { extractAndName, detectAndExtract, hasApiKey } from "../services/claudeService";
+import { extractAndName, detectAndExtract, hasAiProxyConfig } from "../services/claudeService";
 import { lookupTicker } from "../services/marketDataService";
 import { uploadDocument } from "../services/oneDriveService";
 import { loadSettings } from "../services/settingsService";
@@ -84,7 +84,7 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
   const [duplicateHint, setDuplicateHint] = useState(null);
   const [viewDoc, setViewDoc] = useState(false);
   const [error, setError] = useState("");
-  const [mode, setMode] = useState(!editEntry && hasApiKey() ? "ki" : "manual");
+  const [mode, setMode] = useState(!editEntry && hasAiProxyConfig() ? "ki" : "manual");
   const [autoDetect, setAutoDetect] = useState(false);
   const tickerTimer = useRef(null);
 
@@ -131,7 +131,7 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
   async function handleFile(f) {
     setFile(f);
     setError("");
-    if (mode !== "ki" || category === "einnahmen" || !hasApiKey()) return;
+    if (mode !== "ki" || category === "einnahmen" || !hasAiProxyConfig()) return;
     runExtraction(f, autoDetect ? null : category);
   }
 
@@ -140,7 +140,7 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
     setCategory(newCat);
     if (!editEntry) setFields({});
     setDuplicateHint(null);
-    if (mode === "ki" && file && !autoDetect && newCat !== "einnahmen" && hasApiKey()) {
+    if (mode === "ki" && file && !autoDetect && newCat !== "einnahmen" && hasAiProxyConfig()) {
       runExtraction(file, newCat);
     }
   }
@@ -205,7 +205,7 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
 
   const isBewirtung = category === "steuerbelege" && fields.kategorie === "Bewirtung";
   const showKiToggle = category !== "einnahmen";
-  const apiKey = hasApiKey();
+  const aiProxyConfigured = hasAiProxyConfig();
 
   return (
     <>
@@ -234,8 +234,8 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
                 className={mode === "ki" ? "btn-primary" : "btn-secondary"}
                 style={{ flex: 1, padding: "8px 4px", fontSize: 13 }}
                 onClick={() => setMode("ki")}
-                disabled={!apiKey}
-                title={!apiKey ? "Bitte zuerst Claude API-Key in den Einstellungen hinterlegen" : undefined}
+                disabled={!aiProxyConfigured}
+                title={!aiProxyConfigured ? "Bitte zuerst den KI-Proxy konfigurieren" : undefined}
               >
                 🤖 Mit KI ausfüllen
               </button>
@@ -283,9 +283,9 @@ export default function AddEntry({ category: initCategory, editEntry, data, getT
             {extracting && (
               <div style={{ color: "var(--accent)", fontSize: 13, marginTop: 6 }}>🤖 KI liest Dokument…</div>
             )}
-            {!apiKey && showKiToggle && (
+            {!aiProxyConfigured && showKiToggle && (
               <div style={{ color: "var(--text3)", fontSize: 12, marginTop: 4 }}>
-                Kein API-Key konfiguriert – bitte in Einstellungen hinterlegen
+                KI-Proxy nicht konfiguriert - bitte REACT_APP_AI_PROXY_URL und REACT_APP_AI_PROXY_SECRET setzen
               </div>
             )}
           </div>
