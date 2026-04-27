@@ -85,6 +85,16 @@ Der Cloudflare Worker wird ueber `.github/workflows/deploy-worker.yml` deployed.
 
 Bei jeder fachlichen oder codebezogenen Aenderung, die auf `main` deployed werden soll, muessen `APP_VERSION` und `APP_CHANGELOG` in `src/version.js` erhoeht werden. Das aktuelle Schema ist `beta v0.xxx`; pro Release wird um `0.001` erhoeht.
 
+## Arbeiten mit Claude Code und Codex
+
+Siehe `AGENTS.md` fuer verbindliche Repo-Regeln. Wichtig: bestehende Flows erweitern statt parallele Buttons, Seiten oder Workflows anzulegen. Pull Requests sollten den `CI` Workflow bestehen, bevor sie gemerged werden.
+
+Empfohlene Branch Protection fuer `main`:
+
+- Pull Request vor Merge verlangen
+- Status Check `CI` verlangen
+- optional direkte Pushes auf `main` blockieren
+
 ## Sicherheitshinweise
 
 - Der Anthropic API-Key gehoert nur in Cloudflare Secrets, nie in das Frontend oder in Git.
