@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose an improvement for FinanceTracker
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should the user be able to do after this change?
+      placeholder: Describe the desired outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: existing_flow
+    attributes:
+      label: Existing flow to extend
+      description: Which current screen, modal, service, import/export, or workflow should be extended?
+      placeholder: "Example: Extend AddEntry > Steuerbelege > Bewirtung. Do not add a separate scan button."
+    validations:
+      required: true
+  - type: textarea
+    id: avoid
+    attributes:
+      label: What not to build
+      description: Name duplicate buttons, pages, or parallel workflows that should be avoided.
+      placeholder: "No separate button/page if the existing flow can handle it."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know the feature is complete?
+      placeholder: "- Existing flow still works\n- New behavior is available in ...\n- Build passes"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dashboard
+        - Cashflow
+        - AddEntry modal
+        - Steuerbelege
+        - OneDrive sync
+        - AI / Cloudflare Worker
+        - Mobile navigation
+        - GitHub Actions / Deployment
+        - Other
+    validations:
+      required: true

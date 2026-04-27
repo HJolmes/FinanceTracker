@@ -1,5 +1,13 @@
-export const APP_VERSION = "beta v0.003";
+export const APP_VERSION = "beta v0.004";
 export const APP_CHANGELOG = {
+  "beta v0.004": {
+    date: "27.04.2026",
+    entries: [
+      { emoji: "🤖", title: "Agent-Regeln ergaenzt", desc: "Claude Code und Codex bekommen klare Repo-Regeln gegen doppelte Funktionen und fuer einfache Wartung." },
+      { emoji: "✅", title: "PR-CI eingefuehrt", desc: "Pull Requests pruefen jetzt Frontend-Build und Worker-Syntax." },
+      { emoji: "📋", title: "Templates hinzugefuegt", desc: "PR- und Issue-Templates fuehren neue Arbeiten durch bestehende Flows." }
+    ]
+  },
   "beta v0.003": {
     date: "27.04.2026",
     entries: [
