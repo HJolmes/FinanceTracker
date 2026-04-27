@@ -1,10 +1,7 @@
-const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-haiku-4-5-20251001";
 const MAX_PDF_BYTES = 4 * 1024 * 1024;
 
-function getKey() {
-  return localStorage.getItem("financetracker_claude_key") || "";
-}
+const AI_PROXY_URL = (process.env.REACT_APP_AI_PROXY_URL || "").replace(/\/+$/, "");
+const AI_PROXY_SECRET = process.env.REACT_APP_AI_PROXY_SECRET || "";
 
 function parseFirstJson(text) {
   let depth = 0;
@@ -27,29 +24,38 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function callClaude(messages, maxTokens = 1024) {
-  const key = getKey();
-  if (!key) throw new Error("Kein Claude API-Key konfiguriert");
+async function callAiProxy(endpoint, messages, maxTokens = 1024) {
+  if (!hasAiProxyConfig()) {
+    throw new Error("KI-Proxy nicht konfiguriert. Bitte REACT_APP_AI_PROXY_URL und REACT_APP_AI_PROXY_SECRET setzen.");
+  }
+
   let lastError;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await sleep(1000 * Math.pow(2, attempt - 1));
-    const res = await fetch(API_URL, {
+
+    const res = await fetch(`${AI_PROXY_URL}${endpoint}`, {
       method: "POST",
       headers: {
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
         "content-type": "application/json",
+        "x-financetracker-secret": AI_PROXY_SECRET,
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
+      body: JSON.stringify({ messages, maxTokens }),
     });
+
+    let payload = null;
+    try {
+      payload = await res.json();
+    } catch {}
+
     if (res.status === 429) {
-      lastError = new Error("Claude API 429 – Rate limit, bitte kurz warten");
+      lastError = new Error(payload?.error || "KI-Proxy 429 - Rate limit, bitte kurz warten");
       continue;
     }
-    if (!res.ok) throw new Error(`Claude API ${res.status}`);
-    const data = await res.json();
-    return data.content[0].text;
+    if (!res.ok) {
+      throw new Error(payload?.error || `KI-Proxy ${res.status}`);
+    }
+    if (!payload?.text) throw new Error("KI-Proxy hat keine Textantwort geliefert");
+    return payload.text;
   }
   throw lastError;
 }
@@ -67,7 +73,7 @@ function categoryFieldsPrompt(category) {
     steuerbelege:
       "datum (YYYY-MM-DD), betrag, mwst, netto7, netto19, kategorie, beschreibung, partner",
     einnahmen:
-      "name, betrag (Nettobetrag), bruttoGehalt, steuerklasse (Zahl 1–6), lohnsteuer, bav (bAV-Beitrag €/Monat), sachbezug (geldwerter Vorteil €/Monat), kirchensteuer (true/false), kinderlos (true/false), intervall, kategorie",
+      "name, betrag (Nettobetrag), bruttoGehalt, steuerklasse (Zahl 1-6), lohnsteuer, bav (bAV-Beitrag EUR/Monat), sachbezug (geldwerter Vorteil EUR/Monat), kirchensteuer (true/false), kinderlos (true/false), intervall, kategorie",
     ausgaben:
       "name, anbieter, typ, betrag, intervall, faelligkeit (YYYY-MM-DD), email (Kontakt-E-Mail), notiz",
   };
@@ -77,20 +83,20 @@ function categoryFieldsPrompt(category) {
 export async function generateKuendigungsschreiben(entry, category) {
   const details = JSON.stringify(entry, null, 2);
   const prompt =
-    `Du bist ein deutscher Rechtsassistent. Erstelle ein rechtssicheres Kündigungsschreiben für folgenden Vertrag:\n\n${details}\n\n` +
+    `Du bist ein deutscher Rechtsassistent. Erstelle ein rechtssicheres Kuendigungsschreiben fuer folgenden Vertrag:\n\n${details}\n\n` +
     `Antworte NUR mit folgendem JSON:\n` +
     `{\n` +
-    `  "brief": "vollständiger Brieftext mit Betreff, Anrede, Kündigung, Bitte um Bestätigung, Grüße",\n` +
-    `  "email": "kuendigung@anbieter.de oder null wenn keine E-Mail-Kündigung möglich",\n` +
+    `  "brief": "vollstaendiger Brieftext mit Betreff, Anrede, Kuendigung, Bitte um Bestaetigung, Gruesse",\n` +
+    `  "email": "kuendigung@anbieter.de oder null wenn keine E-Mail-Kuendigung moeglich",\n` +
     `  "anleitung": ["Schritt 1: ...", "Schritt 2: ..."] oder null wenn E-Mail ausreicht\n` +
     `}\n\n` +
     `Hinweise:\n` +
-    `- Nutze bekannte Kündigungs-E-Mail-Adressen großer Anbieter (z.B. Spotify, Netflix, Fitnessstudios, Telekommunikation)\n` +
-    `- Wenn der Anbieter keine E-Mail-Kündigung akzeptiert, setze email auf null und gib eine Schritt-für-Schritt-Anleitung\n` +
-    `- Der Brief soll professionell, höflich und rechtlich korrekt sein\n` +
-    `- Füge "fristgerecht" und "zum nächstmöglichen Termin" ein\n` +
-    `- NUR JSON zurückgeben, keine Erklärungen außerhalb des JSON`;
-  const text = await callClaude([{ role: "user", content: [{ type: "text", text: prompt }] }], 2048);
+    `- Nutze bekannte Kuendigungs-E-Mail-Adressen grosser Anbieter (z.B. Spotify, Netflix, Fitnessstudios, Telekommunikation)\n` +
+    `- Wenn der Anbieter keine E-Mail-Kuendigung akzeptiert, setze email auf null und gib eine Schritt-fuer-Schritt-Anleitung\n` +
+    `- Der Brief soll professionell, hoeflich und rechtlich korrekt sein\n` +
+    `- Fuege "fristgerecht" und "zum naechstmoeglichen Termin" ein\n` +
+    `- NUR JSON zurueckgeben, keine Erklaerungen ausserhalb des JSON`;
+  const text = await callAiProxy("/api/generate-cancellation", [{ role: "user", content: [{ type: "text", text: prompt }] }], 2048);
   return parseFirstJson(text);
 }
 
@@ -101,21 +107,21 @@ function buildFileContent(file, base64) {
   return { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } };
 }
 
-// Single API call: extract fields + generate document name for a known category
 export async function extractAndName(file, category) {
-  if (!file.type?.startsWith("image/") && file.size > MAX_PDF_BYTES) throw new Error("PDF zu groß (max 4 MB)");
+  if (!file.type?.startsWith("image/") && file.size > MAX_PDF_BYTES) throw new Error("PDF zu gross (max 4 MB)");
   const base64 = await fileToBase64(file);
   const steuerExtra = category === "steuerbelege"
     ? "Extrahiere auch den 7%/19% MwSt-Split (netto7, netto19). Felder 'teilnehmer' und 'zweck' NICHT extrahieren. "
     : "";
   const prompt =
-    `Analysiere dieses Dokument und gib exakt dieses JSON zurück:\n` +
+    `Analysiere dieses Dokument und gib exakt dieses JSON zurueck:\n` +
     `{\n` +
-    `  "fields": { /* Felder für Kategorie "${category}": ${categoryFieldsPrompt(category)}. ${steuerExtra}Alle Beträge in Euro. */ },\n` +
+    `  "fields": { /* Felder fuer Kategorie "${category}": ${categoryFieldsPrompt(category)}. ${steuerExtra}Alle Betraege in Euro. */ },\n` +
     `  "documentName": "YYYY-MM-DD_${category}_[Anbieter]_[Dokumenttyp].pdf"\n` +
     `}\n` +
-    `Keine Leerzeichen im documentName, Umlaute ersetzen (ä→ae, ö→oe, ü→ue, ß→ss). NUR JSON zurückgeben.`;
-  const text = await callClaude(
+    `Keine Leerzeichen im documentName, Umlaute ersetzen (ae/oe/ue/ss). NUR JSON zurueckgeben.`;
+  const text = await callAiProxy(
+    "/api/extract-and-name",
     [{ role: "user", content: [buildFileContent(file, base64), { type: "text", text: prompt }] }],
     1536
   );
@@ -126,12 +132,11 @@ export async function extractAndName(file, category) {
   };
 }
 
-// Single API call: auto-detect category + extract fields + generate document name
 export async function detectAndExtract(file) {
-  if (!file.type?.startsWith("image/") && file.size > MAX_PDF_BYTES) throw new Error("PDF zu groß (max 4 MB)");
+  if (!file.type?.startsWith("image/") && file.size > MAX_PDF_BYTES) throw new Error("PDF zu gross (max 4 MB)");
   const base64 = await fileToBase64(file);
   const prompt =
-    `Analysiere dieses Dokument und gib exakt dieses JSON zurück:\n` +
+    `Analysiere dieses Dokument und gib exakt dieses JSON zurueck:\n` +
     `{\n` +
     `  "category": "eine von: versicherungen | sparplaene | leasing | bankkonten | steuerbelege",\n` +
     `  "fields": {\n` +
@@ -143,8 +148,9 @@ export async function detectAndExtract(file) {
     `  },\n` +
     `  "documentName": "YYYY-MM-DD_[category]_[Anbieter]_[Dokumenttyp].pdf"\n` +
     `}\n` +
-    `Alle Beträge in Euro. Keine Leerzeichen im documentName, Umlaute ersetzen. NUR JSON zurückgeben.`;
-  const text = await callClaude(
+    `Alle Betraege in Euro. Keine Leerzeichen im documentName, Umlaute ersetzen. NUR JSON zurueckgeben.`;
+  const text = await callAiProxy(
+    "/api/detect-and-extract",
     [{ role: "user", content: [buildFileContent(file, base64), { type: "text", text: prompt }] }],
     1536
   );
@@ -157,67 +163,16 @@ export async function detectAndExtract(file) {
 }
 
 export async function extractFromPDF(file, category) {
-  if (file.size > MAX_PDF_BYTES) throw new Error("PDF zu groß (max 4 MB)");
-  const base64 = await fileToBase64(file);
-  const prompt =
-    `Extrahiere aus diesem Dokument alle Felder für die Kategorie "${category}": ${categoryFieldsPrompt(category)}. ` +
-    (category === "steuerbelege"
-      ? "Extrahiere auch den 7%/19% MwSt-Split (netto7, netto19). Felder 'teilnehmer' und 'zweck' NICHT extrahieren. "
-      : "") +
-    "Alle Beträge in Euro. NUR JSON zurückgeben, keine Erklärungen.";
-  const text = await callClaude([
-    {
-      role: "user",
-      content: [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-        { type: "text", text: prompt },
-      ],
-    },
-  ]);
-  return parseFirstJson(text);
+  return extractAndName(file, category).then((result) => result.fields);
 }
 
 export async function extractFromImage(file, category) {
-  const base64 = await fileToBase64(file);
-  const mediaType = file.type || "image/jpeg";
-  const prompt =
-    `Extrahiere aus diesem Bild alle Felder für die Kategorie "${category}": ${categoryFieldsPrompt(category)}. ` +
-    (category === "steuerbelege"
-      ? "Extrahiere auch den 7%/19% MwSt-Split (netto7, netto19). Felder 'teilnehmer' und 'zweck' NICHT extrahieren. "
-      : "") +
-    "Alle Beträge in Euro. NUR JSON zurückgeben, keine Erklärungen.";
-  const text = await callClaude([
-    {
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-        { type: "text", text: prompt },
-      ],
-    },
-  ]);
-  return parseFirstJson(text);
+  return extractAndName(file, category).then((result) => result.fields);
 }
 
 export async function buildDocumentName(file, category) {
-  const isImage = file.type && file.type.startsWith("image/");
-  const base64 = await fileToBase64(file);
-  const prompt =
-    "Lies dieses Dokument und extrahiere: Datum, Anbieter/Partner, Dokumenttyp. " +
-    `Gib exakt zurück: YYYY-MM-DD_${category}_[Anbieter]_[Dokumenttyp].pdf ` +
-    "Keine Leerzeichen, Umlaute ersetzen (ä→ae, ö→oe, ü→ue, ß→ss). " +
-    "Beispiel: 2024-03-15_versicherungen_Allianz_Beitragsrechnung.pdf " +
-    "Nur den Dateinamen zurückgeben, nichts anderes.";
-  const content = isImage
-    ? [
-        { type: "image", source: { type: "base64", media_type: file.type, data: base64 } },
-        { type: "text", text: prompt },
-      ]
-    : [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-        { type: "text", text: prompt },
-      ];
-  const text = await callClaude([{ role: "user", content }], 256);
-  return text.trim().replace(/\s+/g, "_");
+  const result = await extractAndName(file, category);
+  return result.documentName;
 }
 
 function fileToBase64(file) {
@@ -229,6 +184,6 @@ function fileToBase64(file) {
   });
 }
 
-export function hasApiKey() {
-  return Boolean(getKey());
+export function hasAiProxyConfig() {
+  return Boolean(AI_PROXY_URL && AI_PROXY_SECRET);
 }

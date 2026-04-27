@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -14,6 +14,8 @@ const TABS = [
 ];
 
 export default function NavBar({ activeTab, setActiveTab, onSettings, onLogout, isDesktop }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
   if (isDesktop) {
     return (
       <nav className="sidebar">
@@ -40,20 +42,52 @@ export default function NavBar({ activeTab, setActiveTab, onSettings, onLogout, 
     );
   }
 
-  const visibleTabs = TABS.slice(0, 5);
+  const visibleTabs = TABS.slice(0, 4);
+  const moreTabs = TABS.slice(4);
+  const isMoreActive = moreTabs.some((t) => t.id === activeTab);
+
+  function selectTab(tab) {
+    setMoreOpen(false);
+    setActiveTab(tab);
+  }
 
   return (
-    <nav className="bottom-nav">
-      {visibleTabs.map((t) => (
+    <>
+      {moreOpen && (
+        <div className="bottom-nav-more-backdrop" onClick={() => setMoreOpen(false)}>
+          <div className="bottom-nav-more" onClick={(e) => e.stopPropagation()}>
+            {moreTabs.map((t) => (
+              <button
+                key={t.id}
+                className={`bottom-nav-more-item${activeTab === t.id ? " active" : ""}`}
+                onClick={() => selectTab(t.id)}
+              >
+                <span>{t.icon}</span>
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <nav className="bottom-nav">
+        {visibleTabs.map((t) => (
+          <button
+            key={t.id}
+            className={`bottom-nav-item${activeTab === t.id ? " active" : ""}`}
+            onClick={() => selectTab(t.id)}
+          >
+            <span className="icon">{t.icon}</span>
+            <span>{t.label.split(" ")[0]}</span>
+          </button>
+        ))}
         <button
-          key={t.id}
-          className={`bottom-nav-item${activeTab === t.id ? " active" : ""}`}
-          onClick={() => setActiveTab(t.id)}
+          className={`bottom-nav-item${isMoreActive || moreOpen ? " active" : ""}`}
+          onClick={() => setMoreOpen((open) => !open)}
         >
-          <span className="icon">{t.icon}</span>
-          <span>{t.label.split(" ")[0]}</span>
+          <span className="icon">⋯</span>
+          <span>Mehr</span>
         </button>
-      ))}
-    </nav>
+      </nav>
+    </>
   );
 }

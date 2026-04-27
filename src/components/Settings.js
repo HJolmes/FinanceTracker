@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { loadSettings, saveSettings } from "../services/settingsService";
 import { importFromFile, isDuplicate } from "../services/importService";
+import { hasAiProxyConfig } from "../services/claudeService";
 import { APP_VERSION } from "../version";
 
 export default function Settings({ data, onForceReload, onDataMerge, onShowWhatsNew }) {
@@ -61,6 +62,7 @@ export default function Settings({ data, onForceReload, onDataMerge, onShowWhats
   const alter = settings.geburtsjahr
     ? new Date().getFullYear() - parseInt(settings.geburtsjahr)
     : null;
+  const aiProxyConfigured = hasAiProxyConfig();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 560 }}>
@@ -123,15 +125,15 @@ export default function Settings({ data, onForceReload, onDataMerge, onShowWhats
 
       <div className="card">
         <div style={{ fontWeight: 600, marginBottom: 12 }}>🤖 Claude AI</div>
-        <div className="form-group">
-          <label className="form-label">API-Key (nur lokal gespeichert)</label>
-          <input
-            type="password"
-            value={localStorage.getItem("financetracker_claude_key") || ""}
-            onChange={(e) => localStorage.setItem("financetracker_claude_key", e.target.value)}
-            placeholder="sk-ant-…"
-          />
-          <span style={{ color: "var(--text3)", fontSize: 12 }}>Wird nicht in OneDrive synchronisiert.</span>
+        <div style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.6 }}>
+          Die KI laeuft ueber den Cloudflare Worker Proxy. Der Claude API-Key wird nicht mehr im Browser gespeichert,
+          sondern als Secret im Worker hinterlegt.
+        </div>
+        <div style={{ color: aiProxyConfigured ? "var(--green)" : "var(--red)", fontSize: 13, marginTop: 8, fontWeight: 600 }}>
+          Status: {aiProxyConfigured ? "Proxy im Frontend-Build konfiguriert" : "Proxy im Frontend-Build nicht konfiguriert"}
+        </div>
+        <div style={{ color: "var(--text3)", fontSize: 12, marginTop: 8 }}>
+          Frontend-Build benoetigt REACT_APP_AI_PROXY_URL und REACT_APP_AI_PROXY_SECRET.
         </div>
       </div>
 
